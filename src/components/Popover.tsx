@@ -3,6 +3,7 @@
 // Hand-rolled note: base-ui is the §2 pick; this stands in with the same
 // behavioural contract to keep the dependency surface small for v1.
 import { useEffect, useId, useRef, useState } from 'react'
+import { Info } from './icons'
 
 export function Popover({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -29,10 +30,11 @@ export function Popover({ children }: { children: React.ReactNode }) {
         type="button"
         aria-expanded={open}
         aria-controls={id}
+        aria-label="More information"
         onClick={() => setOpen((v) => !v)}
-        className="pressable inline-flex h-6 w-6 items-center justify-center rounded-full border border-rule text-[11px] text-ink-faint"
+        className="pressable relative inline-flex h-6 w-6 items-center justify-center rounded-full text-ink-faint after:absolute after:-inset-2 after:content-['']"
       >
-        i
+        <Info size={16} />
       </button>
       {open && (
         <div

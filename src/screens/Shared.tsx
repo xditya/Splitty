@@ -7,6 +7,8 @@ import QRCode from 'react-qr-code'
 import { Drawer } from 'vaul'
 import { decodeFragment, fetchCodeShare, fragmentVpa, patchPaid, type SharedSplit } from '../share/codec'
 import { MoneyStatic } from '../components/Money'
+import { Button } from '../components/Button'
+import { Check, Clock, QrCode as QrIcon } from '../components/icons'
 import { initials } from '../lib/palette'
 import { iosAppLinks, platform, upiLink } from '../lib/upi'
 import { clsx } from 'clsx'
@@ -43,9 +45,14 @@ export function SharedScreen() {
   }
   if (!split) {
     return (
-      <div className="p-10 text-center">
-        <p className="text-sm">Couldn't find that split — it may have expired (links live 30 days).</p>
-        <Link to="/" className="pressable mt-4 inline-block rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper">
+      <div className="mx-auto max-w-md p-10 text-center">
+        <p className="text-sm leading-relaxed">
+          Couldn't find that split — it may have expired (links live 30 days).
+        </p>
+        <Link
+          to="/"
+          className="pressable mt-4 inline-block rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-paper"
+        >
           Start a new one
         </Link>
       </div>
@@ -84,55 +91,53 @@ export function SharedScreen() {
           const isPayer = p.id === split.payerId
           const paid = isPayer || !!split.paid[p.id]
           return (
-            <div key={p.id} className="flex items-center gap-3 border-b border-dashed border-rule px-3 py-3">
+            <div key={p.id} className="flex items-start gap-3 border-b border-dashed border-rule px-3 py-3">
               <span
-                className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                 style={{ background: p.color }}
               >
                 {initials(p.name)}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold">
+                <div className="truncate text-sm font-semibold">
                   {p.name}
-                  {isPayer && <span className="ml-1 text-[10px] font-normal text-ink-faint">paid the bill</span>}
+                  {isPayer && <span className="ml-1.5 text-[10px] font-normal text-ink-faint">paid the bill</span>}
                 </div>
-              </div>
-              <MoneyStatic paise={p.total} className="text-base font-bold" />
-              {!isPayer && (
-                <div className="flex flex-col items-end gap-1">
-                  {canPay && (
+                {!isPayer && (
+                  <div className="mt-2 flex gap-2">
+                    {canPay && (
+                      <Button size="sm" onClick={() => setQrPersonId(p.id)}>
+                        <QrIcon size={14} />
+                        Pay
+                      </Button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setQrPersonId(p.id)}
-                      className="pressable rounded-md border border-rule px-2.5 py-1.5 text-[11px] font-bold"
+                      onClick={() => togglePaid(p.id)}
+                      aria-pressed={paid}
+                      className={clsx(
+                        'pressable flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold',
+                        paid ? 'text-settle-paid' : 'text-settle-pending',
+                      )}
                     >
-                      Pay
+                      {paid ? <Check size={14} /> : <Clock size={14} />}
+                      {paid ? 'Paid' : 'Mark paid'}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => togglePaid(p.id)}
-                    aria-pressed={paid}
-                    className={clsx(
-                      'pressable rounded-md px-2.5 py-1.5 text-[11px] font-bold',
-                      paid ? 'text-settle-paid' : 'text-settle-pending',
-                    )}
-                  >
-                    {paid ? '✓ Paid' : 'Mark paid'}
-                  </button>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
+              <MoneyStatic paise={p.total} className="text-base font-semibold" />
             </div>
           )
         })}
         <div className="flex items-center justify-between px-3 pt-3">
-          <span className="text-sm font-bold uppercase tracking-wide">Total</span>
-          <MoneyStatic paise={split.total} className="text-base font-bold" />
+          <span className="text-sm font-semibold uppercase tracking-wide">Total</span>
+          <MoneyStatic paise={split.total} className="text-base font-semibold" />
         </div>
       </section>
 
       {!canPay && (
-        <p className="banner-enter mt-3 rounded-md border border-rule bg-paper-raised px-3 py-2 text-center text-[11px] text-ink-faint">
+        <p className="banner-enter mt-3 rounded-lg border border-rule bg-paper-raised px-3 py-2 text-center text-[11px] leading-relaxed text-ink-faint">
           This split was shared without a UPI ID, so there's no Pay button —{' '}
           {payer ? `ask ${payer.name}` : 'ask whoever paid'} where to send the money, then mark
           yourself paid.
@@ -140,24 +145,27 @@ export function SharedScreen() {
       )}
 
       <p className="mt-4 text-center text-[11px] text-ink-faint">
-        Made with <Link to="/" className="underline">Splitty</Link> — nothing about this bill is stored
-        beyond the split itself.
+        Made with{' '}
+        <Link to="/" className="underline">
+          Splitty
+        </Link>{' '}
+        — nothing about this bill is stored beyond the split itself.
       </p>
 
       <Drawer.Root open={qrPerson !== undefined && qrPersonId !== null} onOpenChange={(o) => !o && setQrPersonId(null)}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-6 pb-[max(24px,env(safe-area-inset-bottom))]">
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-6 pb-[max(24px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-rule" />
             {qrPerson && canPay && (
               <div className="flex flex-col items-center gap-3">
                 <Drawer.Title className="font-warm text-xl">{qrPerson.name} pays</Drawer.Title>
                 <MoneyStatic paise={qrPerson.total} className="text-3xl font-bold" />
-                <div className="rounded-lg bg-white p-4">
+                <div className="rounded-xl bg-white p-4">
                   <QRCode value={upiFor(qrPerson.id)} size={220} aria-label="UPI payment QR" />
                 </div>
                 {platform() === 'android' && (
-                  <a href={upiFor(qrPerson.id)} className="pressable w-full rounded-md bg-ink py-3 text-center text-sm font-bold text-paper">
+                  <a href={upiFor(qrPerson.id)} className="pressable w-full rounded-lg bg-ink py-3 text-center text-sm font-semibold text-paper">
                     Open UPI app
                   </a>
                 )}
@@ -170,7 +178,7 @@ export function SharedScreen() {
                       note: `${split.merchant ?? 'Bill'} split`,
                       ref: `SPLT${split.code ?? 'X'}${split.people.indexOf(qrPerson)}`,
                     }).map((l) => (
-                      <a key={l.label} href={l.url} className="pressable flex-1 rounded-md border border-rule py-2.5 text-center text-xs font-bold">
+                      <a key={l.label} href={l.url} className="pressable flex-1 rounded-lg border border-rule py-2.5 text-center text-xs font-semibold">
                         {l.label}
                       </a>
                     ))}

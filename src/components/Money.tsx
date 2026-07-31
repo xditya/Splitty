@@ -16,11 +16,11 @@ export function Money({ paise, className }: { paise: Paise; className?: string }
       value={paise / 100}
       format={INR_FORMAT}
       locales="en-IN"
-      className={`tabular ${className ?? ''}`}
+      className={`tabular font-mono ${className ?? ''}`}
     />
   )
 }
 
 export function MoneyStatic({ paise, className }: { paise: Paise; className?: string }) {
-  return <span className={`tabular ${className ?? ''}`}>{formatPaise(paise)}</span>
+  return <span className={`tabular font-mono ${className ?? ''}`}>{formatPaise(paise)}</span>
 }

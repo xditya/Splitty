@@ -1,17 +1,18 @@
 // PLAN.md §8 — the assignment screen. One hand, standing, noisy restaurant.
-// The people selector lives in a BOTTOM TRAY (thumb reach): select one person
-// for the solo fast path, or several to "club" them — one tap then assigns a
-// share to everyone selected (A+B on the fries, A+C on the wings, A alone on
-// the lassi). Tap-to-assign itself has NO animation (§15.2 frequency rule):
-// the badge appears instantly and the totals ticking (NumberFlow) is the
-// feedback.
+// Mobile: people brush in a bottom tray (thumb reach), totals in a sticky
+// translucent top bar. Desktop (lg+): receipt left, brush + totals + continue
+// in a sticky right aside. Tap-to-assign has NO animation (§15.2 frequency
+// rule): badges appear instantly; NumberFlow ticking is the feedback.
 import { useRef, useState } from 'react'
 import { Drawer } from 'vaul'
 import { animate } from 'motion/react'
 import { useBill } from '../store/bill'
-import { computeSplit } from '../lib/split'
+import { computeSplit, type SplitResult } from '../lib/split'
 import { PersonChip } from '../components/Chip'
 import { Money, MoneyStatic } from '../components/Money'
+import { Button } from '../components/Button'
+import { AppBar, TwoPane } from '../components/Shell'
+import { House, UserPlus, X } from '../components/icons'
 import { initials } from '../lib/palette'
 import { fullyAssigned, unitsLabel, unitsUsed } from '../lib/units'
 import type { Item } from '../lib/types'
@@ -113,8 +114,7 @@ function useSwipeToClear(onClear: () => void, onTap: () => void, onLongPress: ()
 }
 
 // Rejection feedback (apple-design §13 — reserve haptics for meaningful
-// moments): a short buzz + row shake ONLY when a tap is blocked. Successful
-// assigns stay silent — they happen 50–150× per bill (§15.2 frequency rule).
+// moments): a short buzz + row shake ONLY when a tap is blocked.
 const buzz = () => navigator.vibrate?.(35)
 
 function AssignRow({ item, onLongPress }: { item: Item; onLongPress: (id: string) => void }) {
@@ -145,7 +145,7 @@ function AssignRow({ item, onLongPress }: { item: Item; onLongPress: (id: string
   const incomplete = !fullyAssigned(item.shares, item.qty) // amber until every unit is claimed
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative isolate overflow-hidden">
       <div className="absolute inset-y-0 right-3 flex items-center text-[11px] font-bold uppercase tracking-wide text-amber-flag">
         clear
       </div>
@@ -157,18 +157,18 @@ function AssignRow({ item, onLongPress }: { item: Item; onLongPress: (id: string
         onPointerCancel={gesture.onPointerCancel}
         onAnimationEnd={() => setRejecting(false)}
         className={clsx(
-          'pressable-row relative flex min-h-[52px] cursor-pointer touch-pan-y items-center gap-2 border-b border-dashed border-rule bg-paper-raised px-3 py-2 select-none',
+          'pressable-row relative flex min-h-[52px] cursor-pointer touch-pan-y items-center gap-2 border-b border-dashed border-rule bg-paper-raised px-3 py-2 select-none hover:bg-paper',
           incomplete && 'border-l-4 border-l-amber-flag', // §8 guardrail
           item.confidence === 'low' && 'bg-amber-50',
           rejecting && 'row-reject',
         )}
       >
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm">
+          <div className="truncate font-mono text-sm">
             {item.qty > 1 && <span className="text-ink-faint">{item.qty}× </span>}
             {item.name || 'Unnamed item'}
             {item.qty > 1 && (
-              <span className={clsx('ml-1 text-[10px]', incomplete ? 'text-amber-flag' : 'text-ink-faint')}>
+              <span className={clsx('ml-1.5 font-sans text-[10px]', incomplete ? 'text-amber-flag' : 'text-ink-faint')}>
                 {Math.min(used, item.qty).toLocaleString(undefined, { maximumFractionDigits: 1 })} of{' '}
                 {item.qty} assigned
               </span>
@@ -195,7 +195,7 @@ function AssignRow({ item, onLongPress }: { item: Item; onLongPress: (id: string
                   >
                     {initials(p.name)}
                     {unitsLabel(n) && <span className="opacity-90">{unitsLabel(n)}</span>}
-                    <span aria-hidden className="ml-0.5 opacity-70">✕</span>
+                    <X size={10} className="opacity-70" aria-hidden />
                   </button>
                 )
               })}
@@ -208,22 +208,128 @@ function AssignRow({ item, onLongPress }: { item: Item; onLongPress: (id: string
   )
 }
 
+/** The brush — shared by the mobile tray (row) and desktop aside (wrap). */
+function PeopleBrush({ onAdd }: { onAdd: () => void }) {
+  const { bill, activePersonIds, togglePerson, selectAll, clearSelection } = useBill()
+  const allSelected = activePersonIds.length === bill.people.length && bill.people.length > 0
+  return (
+    <>
+      {bill.people.map((p) => {
+        const on = activePersonIds.includes(p.id)
+        return (
+          <button
+            key={p.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => togglePerson(p.id)}
+            className={clsx(
+              'pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold',
+              on ? 'border-ink bg-ink text-paper' : 'border-rule text-ink-faint hover:bg-paper',
+            )}
+          >
+            <PersonChip person={p} size="sm" active={on} />
+            {p.name.split(/\s+/)[0]}
+          </button>
+        )
+      })}
+      <button
+        type="button"
+        onClick={() => (allSelected ? clearSelection() : selectAll())}
+        aria-pressed={allSelected}
+        className={clsx(
+          'pressable min-h-11 shrink-0 rounded-full border px-3 text-xs font-semibold',
+          allSelected ? 'border-ink bg-ink text-paper' : 'border-rule text-ink-faint hover:bg-paper',
+        )}
+      >
+        Everyone
+      </button>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="pressable flex min-h-11 shrink-0 items-center gap-1 rounded-full border border-dashed border-rule px-3 text-xs font-semibold text-ink-faint hover:bg-paper"
+      >
+        <UserPlus size={14} />
+        Add
+      </button>
+    </>
+  )
+}
+
+/** Per-person running totals — chips (mobile header) or rows (desktop aside). */
+function RunningTotals({ split, layout }: { split: SplitResult; layout: 'chips' | 'list' }) {
+  const { bill, activePersonIds, togglePerson } = useBill()
+  if (layout === 'chips') {
+    return (
+      <>
+        {bill.people.map((p) => (
+          <PersonChip
+            key={p.id}
+            person={p}
+            active={activePersonIds.length === 0 || activePersonIds.includes(p.id)}
+            onClick={() => togglePerson(p.id)}
+            label={<Money paise={split.perPerson[p.id]?.total ?? 0} className="text-[10px] text-ink-faint" />}
+          />
+        ))}
+      </>
+    )
+  }
+  return (
+    <div className="divide-y divide-rule">
+      {bill.people.map((p) => (
+        <div key={p.id} className="flex items-center gap-2 py-2">
+          <PersonChip person={p} size="sm" />
+          <span className="min-w-0 flex-1 truncate text-sm">{p.name}</span>
+          <Money paise={split.perPerson[p.id]?.total ?? 0} className="text-sm font-semibold" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Unassigned count + Back/Continue — mobile footer and desktop aside. */
+function ContinueBar({ unassigned }: { unassigned: number }) {
+  const { bill, setStep } = useBill()
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="text-xs">
+        {unassigned > 0 ? (
+          <span className="font-semibold text-amber-flag">
+            {unassigned} item{unassigned === 1 ? '' : 's'} not fully assigned
+          </span>
+        ) : (
+          <span className="text-ink-faint">All items assigned</span>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => setStep('items')}>
+          Back
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={unassigned > 0 || bill.items.length === 0}
+          onClick={() => setStep('charges')}
+        >
+          Continue
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function AssignScreen() {
-  const {
-    bill,
-    activePersonIds,
-    togglePerson,
-    selectAll,
-    clearSelection,
-    selectOnly,
-    addPerson,
-    setStep,
-    splitEvenly,
-  } = useBill()
+  const { bill, activePersonIds, setStep, selectOnly, addPerson, splitEvenly } = useBill()
   const [sheetItemId, setSheetItemId] = useState<string | null>(null)
   const [sheetSelection, setSheetSelection] = useState<string[]>([])
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const split = computeSplit(bill)
+  // §8 guardrail — an item blocks Continue until EVERY unit is claimed
+  const unassigned = bill.items.filter((i) => !fullyAssigned(i.shares, i.qty)).length
+  const sheetItem = bill.items.find((i) => i.id === sheetItemId)
+  const selectedNames = bill.people
+    .filter((p) => activePersonIds.includes(p.id))
+    .map((p) => p.name.split(/\s+/)[0])
 
   // Someone joined the table mid-assignment: add them, brush switches to them.
   const submitNewPerson = () => {
@@ -235,143 +341,98 @@ export function AssignScreen() {
     setNewName('')
     setAddOpen(false)
   }
-  const split = computeSplit(bill)
-  // §8 guardrail — an item blocks Continue until EVERY unit is claimed
-  const unassigned = bill.items.filter((i) => !fullyAssigned(i.shares, i.qty)).length
-  const sheetItem = bill.items.find((i) => i.id === sheetItemId)
-  const allSelected = activePersonIds.length === bill.people.length && bill.people.length > 0
-  const selectedNames = bill.people
-    .filter((p) => activePersonIds.includes(p.id))
-    .map((p) => p.name.split(/\s+/)[0])
+
+  const instruction =
+    activePersonIds.length === 0 ? (
+      <>Pick people below, then tap items — each tap assigns one unit. Pick two+ and they share a unit together.</>
+    ) : activePersonIds.length === 1 ? (
+      <>
+        Each tap: <span className="font-semibold text-ink">{selectedNames[0]}</span> takes one unit.
+      </>
+    ) : (
+      <>
+        Each tap: <span className="font-semibold text-ink">{selectedNames.join(' + ')}</span> share
+        one unit together.
+      </>
+    )
+
+  const receipt = (
+    <div className="torn-edge mx-3 mt-1 bg-paper-raised pb-3 shadow-sm lg:mx-0">
+      {bill.items.map((item) => (
+        <AssignRow
+          key={item.id}
+          item={item}
+          onLongPress={(id) => {
+            setSheetItemId(id)
+            setSheetSelection(Object.keys(bill.items.find((i) => i.id === id)?.shares ?? {}))
+          }}
+        />
+      ))}
+    </div>
+  )
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      {/* §15.1 — running totals live in a translucent top material. Selection
-          state mirrors the tray; tapping here toggles too. */}
-      <header className="material-bar sticky top-0 z-20">
+    <div className="isolate flex min-h-dvh flex-col">
+      <AppBar right="home" className="hidden lg:flex" />
+
+      {/* mobile: sticky translucent totals bar (§15.1) */}
+      <header className="material-bar sticky top-0 z-10 lg:hidden">
         <div className="mx-auto flex max-w-md items-center gap-1 overflow-x-auto px-2 py-2">
-          {/* escape hatch — the bill persists, Home offers "Resume" */}
           <button
             type="button"
             onClick={() => setStep('home')}
             aria-label="Back to home"
-            className="pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-rule text-base"
+            className="pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-faint"
           >
-            🏠
+            <House size={20} />
           </button>
-          {bill.people.map((p) => (
-            <PersonChip
-              key={p.id}
-              person={p}
-              active={activePersonIds.length === 0 || activePersonIds.includes(p.id)}
-              onClick={() => togglePerson(p.id)}
-              label={
-                <Money paise={split.perPerson[p.id]?.total ?? 0} className="text-[10px] text-ink-faint" />
-              }
-            />
-          ))}
+          <RunningTotals split={split} layout="chips" />
         </div>
         <div className="scroll-edge absolute inset-x-0 top-full" />
       </header>
 
-      <main className="mx-auto w-full max-w-md flex-1 pb-44">
-        <p className="banner-enter px-4 py-3 text-xs text-ink-faint">
-          {activePersonIds.length === 0 ? (
-            <>
-              Pick people below, then tap items — each tap assigns one unit. Pick two+ and they
-              share a unit together (½ each).
-            </>
-          ) : activePersonIds.length === 1 ? (
-            <>
-              Each tap: <span className="font-bold text-ink">{selectedNames[0]}</span> takes one
-              unit. Badge ✕ removes; swipe left clears.
-            </>
-          ) : (
-            <>
-              Each tap: <span className="font-bold text-ink">{selectedNames.join(' + ')}</span>{' '}
-              share one unit together. Badge ✕ removes; swipe left clears.
-            </>
-          )}
-        </p>
-        <div className="torn-edge mx-3 mt-1 bg-paper-raised pb-3 shadow-sm">
-          {bill.items.map((item) => (
-            <AssignRow
-              key={item.id}
-              item={item}
-              onLongPress={(id) => {
-                setSheetItemId(id)
-                setSheetSelection(Object.keys(bill.items.find((i) => i.id === id)?.shares ?? {}))
-              }}
-            />
-          ))}
-        </div>
-      </main>
+      <TwoPane
+        mainClassName="flex-1 pb-44 lg:pb-10"
+        main={
+          <>
+            <p className="banner-enter px-4 py-3 text-xs leading-relaxed text-ink-faint lg:px-0">
+              {instruction}
+            </p>
+            {receipt}
+          </>
+        }
+        aside={
+          <>
+            <section className="rounded-lg border border-rule bg-paper-raised p-4">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+                Assigning to
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <PeopleBrush onAdd={() => setAddOpen(true)} />
+              </div>
+            </section>
+            <section className="rounded-lg border border-rule bg-paper-raised p-4">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+                Running totals
+              </h2>
+              <RunningTotals split={split} layout="list" />
+            </section>
+            <section className="rounded-lg border border-rule bg-paper-raised p-4">
+              <ContinueBar unassigned={unassigned} />
+            </section>
+          </>
+        }
+      />
 
-      {/* §8 — bottom tray: the assignment brush, in thumb reach */}
-      <footer className="material-bar fixed inset-x-0 bottom-0 z-20 pb-[max(10px,env(safe-area-inset-bottom))]">
+      {/* mobile: bottom tray — the brush in thumb reach (§8) */}
+      <footer className="material-bar fixed inset-x-0 bottom-0 z-20 pb-[max(10px,env(safe-area-inset-bottom))] lg:hidden">
         <div className="scroll-edge absolute inset-x-0 bottom-full rotate-180" />
         <div className="mx-auto max-w-md px-3 pt-2">
           <div className="flex items-center gap-1 overflow-x-auto pb-1">
-            {bill.people.map((p) => {
-              const on = activePersonIds.includes(p.id)
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => togglePerson(p.id)}
-                  className={clsx(
-                    'pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold',
-                    on ? 'border-ink bg-ink text-paper' : 'border-rule text-ink-faint',
-                  )}
-                >
-                  <PersonChip person={p} size="sm" active={on} />
-                  {p.name.split(/\s+/)[0]}
-                </button>
-              )
-            })}
-            <button
-              type="button"
-              onClick={() => (allSelected ? clearSelection() : selectAll())}
-              aria-pressed={allSelected}
-              className={clsx(
-                'pressable min-h-11 shrink-0 rounded-full border px-3 text-xs font-bold',
-                allSelected ? 'border-ink bg-ink text-paper' : 'border-rule text-ink-faint',
-              )}
-            >
-              Everyone
-            </button>
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="pressable min-h-11 shrink-0 rounded-full border border-dashed border-rule px-3 text-xs font-bold text-ink-faint"
-            >
-              + Add
-            </button>
+            <PeopleBrush onAdd={() => setAddOpen(true)} />
           </div>
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="text-xs">
-              {unassigned > 0 ? (
-                <span className="font-bold text-amber-flag">
-                  {unassigned} item{unassigned === 1 ? '' : 's'} not fully assigned
-                </span>
-              ) : (
-                <span className="text-ink-faint">All items assigned</span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setStep('items')} className="pressable rounded-md border border-rule px-4 py-2 text-sm">
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={unassigned > 0 || bill.items.length === 0}
-                onClick={() => setStep('charges')}
-                className="pressable rounded-md bg-ink px-5 py-2 text-sm font-bold text-paper disabled:opacity-40"
-              >
-                Continue
-              </button>
-            </div>
+          <div className="pt-1">
+            <ContinueBar unassigned={unassigned} />
           </div>
         </div>
       </footer>
@@ -380,7 +441,7 @@ export function AssignScreen() {
       <Drawer.Root open={addOpen} onOpenChange={setAddOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
             <Drawer.Title className="font-warm text-lg">Add a person</Drawer.Title>
             <div className="mt-3 flex gap-2">
@@ -390,26 +451,21 @@ export function AssignScreen() {
                 onKeyDown={(e) => e.key === 'Enter' && submitNewPerson()}
                 placeholder="Name"
                 autoFocus
-                className="min-h-11 min-w-0 flex-1 rounded-md border border-rule bg-paper px-3 text-sm"
+                className="min-h-11 min-w-0 flex-1 rounded-lg border border-rule bg-paper px-3 text-sm"
               />
-              <button
-                type="button"
-                disabled={!newName.trim()}
-                onClick={submitNewPerson}
-                className="pressable min-h-11 rounded-md bg-ink px-4 text-sm font-bold text-paper disabled:opacity-40"
-              >
+              <Button variant="primary" disabled={!newName.trim()} onClick={submitNewPerson}>
                 Add
-              </button>
+              </Button>
             </div>
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
 
-      {/* §8 secondary action — Vaul sheet for exact per-item membership */}
+      {/* §8 secondary action — Vaul sheet: split ALL units evenly */}
       <Drawer.Root open={sheetItemId !== null} onOpenChange={(o) => !o && setSheetItemId(null)}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
             <Drawer.Title className="font-warm text-lg">
               Split “{sheetItem?.name || 'item'}” evenly among…
@@ -431,7 +487,7 @@ export function AssignScreen() {
                     }
                     className={clsx(
                       'pressable flex min-h-11 items-center gap-2 rounded-full border px-3 text-sm',
-                      on ? 'border-ink bg-ink text-paper' : 'border-rule',
+                      on ? 'border-ink bg-ink text-paper' : 'border-rule hover:bg-paper',
                     )}
                   >
                     <PersonChip person={p} size="sm" />
@@ -440,17 +496,18 @@ export function AssignScreen() {
                 )
               })}
             </div>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              full
+              className="mt-5"
               disabled={sheetSelection.length === 0}
               onClick={() => {
                 if (sheetItemId) splitEvenly(sheetItemId, sheetSelection)
                 setSheetItemId(null)
               }}
-              className="pressable mt-5 w-full rounded-md bg-ink py-3 text-sm font-bold text-paper disabled:opacity-40"
             >
               Split {sheetSelection.length > 0 ? `${sheetSelection.length} ways` : ''}
-            </button>
+            </Button>
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>

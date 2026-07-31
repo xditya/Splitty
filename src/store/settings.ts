@@ -26,6 +26,7 @@ interface SettingsState {
   payerName: string
   chargeModeDefaults: Partial<Record<ChargeKind, SplitMode>>
   tesseractBannerDismissed: boolean
+  installPromptSeen: boolean // the one-time post-flow install nudge
   setModel: (m: string) => void
   setAvailableModels: (ids: string[]) => void
   setAlwaysOnDevice: (v: boolean) => void
@@ -33,6 +34,7 @@ interface SettingsState {
   setPayerName: (v: string) => void
   rememberChargeMode: (kind: ChargeKind, mode: SplitMode) => void
   dismissTesseractBanner: () => void
+  markInstallPromptSeen: () => void
 }
 
 // Fallback list only — Settings fetches the key's real model list (ListModels)
@@ -52,6 +54,7 @@ export const useSettings = create<SettingsState>()(
       payerName: '',
       chargeModeDefaults: {},
       tesseractBannerDismissed: false,
+      installPromptSeen: false,
       setModel: (model) => set({ model }),
       setAvailableModels: (availableModels) => set({ availableModels }),
       setAlwaysOnDevice: (alwaysOnDevice) => set({ alwaysOnDevice }),
@@ -60,6 +63,7 @@ export const useSettings = create<SettingsState>()(
       rememberChargeMode: (kind, mode) =>
         set((s) => ({ chargeModeDefaults: { ...s.chargeModeDefaults, [kind]: mode } })),
       dismissTesseractBanner: () => set({ tesseractBannerDismissed: true }),
+      markInstallPromptSeen: () => set({ installPromptSeen: true }),
     }),
     {
       name: 'splitty:settings',

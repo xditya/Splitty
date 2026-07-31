@@ -11,6 +11,11 @@ QR codes.
 | --- | --- | --- | --- |
 | ![Home screen](docs/screenshots/home.png) | ![Assignment screen](docs/screenshots/assign.png) | ![Charges screen](docs/screenshots/charges.png) | ![Summary screen](docs/screenshots/summary.png) |
 
+On desktop the flow re-composes into two panes — receipt on the left, people/totals/actions in a
+sticky aside:
+
+![Desktop assignment view](docs/screenshots/desktop-assign.png)
+
 ## Why it's different
 
 - **Never broken.** Three scan tiers with silent fallback: your own Gemini key (browser → Google
@@ -44,7 +49,8 @@ QR codes.
 ## Stack
 
 React + Vite + TypeScript · Tailwind v4 · zustand · motion · vaul · sonner · NumberFlow ·
-input-otp · react-qr-code · lz-string · tesseract.js · Vercel serverless (Edge) + Upstash Redis.
+lucide-react · input-otp · react-qr-code · lz-string · tesseract.js · Vercel serverless (Edge) +
+Upstash Redis.
 
 ## Getting started
 

@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import { InstallSheet } from './components/InstallSheet'
 import { useBill } from './store/bill'
 import { HomeScreen } from './screens/Home'
 import { PeopleScreen } from './screens/People'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/s/:code" element={<SharedScreen />} />
       </Routes>
       <Toaster position="top-center" />
+      <InstallSheet />
     </BrowserRouter>
   )
 }
