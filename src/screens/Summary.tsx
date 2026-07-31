@@ -17,6 +17,7 @@ import { Check, Clock, Copy, ImageDown, QrCode as QrIcon, Share2 } from '../comp
 import { iosAppLinks, platform, upiLink } from '../lib/upi'
 import { canInstall, isStandalone, requestInstall } from '../lib/pwa'
 import { codeShareUrl, createCodeShare, fragmentUrl, toShared } from '../share/codec'
+import { useHistory } from '../store/history'
 import { buildSplitText, renderSplitImage } from '../share/export'
 import type { Person } from '../lib/types'
 import { clsx } from 'clsx'
@@ -38,6 +39,14 @@ export function SummaryScreen() {
     if (!bill.payerVpa && settings.payerVpa) setPayerVpa(settings.payerVpa)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Keep the device-local history snapshot current (visible on Home until —
+  // and after — the 30-day share code expires).
+  const upsertHistory = useHistory((s) => s.upsert)
+  useEffect(() => {
+    if (bill.people.length === 0 || bill.items.length === 0) return
+    upsertHistory(bill.id, toShared(bill), shareCode)
+  }, [bill, shareCode, upsertHistory])
 
   // Reaching the summary = the user has genuinely tried the app. Offer the
   // install ONCE, ever, and only where an install path actually exists.

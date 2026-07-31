@@ -21,6 +21,73 @@ import {
 } from "../components/icons";
 import { GithubIcon } from "../components/GithubIcon";
 import { requestInstall, useInstallable } from "../lib/pwa";
+import { History, X } from "../components/icons";
+import { MoneyStatic } from "../components/Money";
+import { codeAlive, daysLeft, useHistory } from "../store/history";
+import { encodeFragment } from "../share/codec";
+
+// Past splits stay reachable from this device: live via their share code
+// while it exists (30 days server-side), and from the local snapshot forever.
+function RecentSplits() {
+  const { entries, remove } = useHistory();
+  const { bill } = useBill();
+  const navigate = useNavigate();
+  // the bill still being worked on has its own Resume button
+  const past = entries.filter((e) => e.billId !== bill.id);
+  if (past.length === 0) return null;
+
+  return (
+    <section className="mt-4">
+      <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+        <History size={13} />
+        Recent splits
+      </h2>
+      <div className="mt-2 divide-y divide-rule rounded-lg border border-rule bg-paper-raised">
+        {past.slice(0, 5).map((e) => (
+          <div key={e.billId} className="flex items-center gap-2 pr-1">
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  codeAlive(e)
+                    ? `/s/${e.code}${e.data.payerVpa ? `#pa=${encodeURIComponent(e.data.payerVpa)}` : ""}`
+                    : `/s#d=${encodeFragment(e.data)}`,
+                )
+              }
+              className="pressable flex min-h-13 min-w-0 flex-1 items-center gap-3 px-4 text-left hover:bg-paper"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
+                  {e.data.merchant ?? "Bill split"}
+                </span>
+                <span className="block text-[11px] text-ink-faint">
+                  {new Date(e.createdAt).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                  {" · "}
+                  {e.data.people.length} people
+                  {codeAlive(e)
+                    ? ` · live, code ${e.code} (${daysLeft(e)}d left)`
+                    : " · saved on this device"}
+                </span>
+              </span>
+              <MoneyStatic paise={e.data.total} className="text-sm font-semibold" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Remove ${e.data.merchant ?? "split"} from history`}
+              onClick={() => remove(e.billId)}
+              className="pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-faint hover:bg-ink/5"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export function HomeScreen() {
   const { newBill, loadScan, bill, setStep } = useBill();
@@ -214,6 +281,8 @@ export function HomeScreen() {
             Resume the bill in progress
           </Button>
         )}
+
+        <RecentSplits />
       </main>
 
       <footer className="mt-auto pt-10">

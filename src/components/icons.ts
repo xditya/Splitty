@@ -13,6 +13,7 @@ export {
   Eye,
   Globe,
   EyeOff,
+  History,
   House,
   ImageDown,
   ImageUp,
