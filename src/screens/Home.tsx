@@ -21,70 +21,114 @@ import {
 } from "../components/icons";
 import { GithubIcon } from "../components/GithubIcon";
 import { requestInstall, useInstallable } from "../lib/pwa";
-import { History, X } from "../components/icons";
+import { ChevronDown, History, X } from "../components/icons";
 import { MoneyStatic } from "../components/Money";
 import { codeAlive, daysLeft, useHistory } from "../store/history";
 import { encodeFragment } from "../share/codec";
+import { clsx } from "clsx";
 
 // Past splits stay reachable from this device: live via their share code
 // while it exists (30 days server-side), and from the local snapshot forever.
+// Collapsed to one row by default so history never eats the home screen;
+// deleting takes a second, deliberate tap on a red confirm (auto-reverts).
 function RecentSplits() {
   const { entries, remove } = useHistory();
   const { bill } = useBill();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  // an armed delete disarms itself — walking away never leaves a live trigger
+  useEffect(() => {
+    if (!confirmingId) return;
+    const t = setTimeout(() => setConfirmingId(null), 3000);
+    return () => clearTimeout(t);
+  }, [confirmingId]);
+
   // the bill still being worked on has its own Resume button
   const past = entries.filter((e) => e.billId !== bill.id);
   if (past.length === 0) return null;
 
   return (
-    <section className="mt-4">
-      <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
-        <History size={13} />
-        Recent splits
-      </h2>
-      <div className="mt-2 divide-y divide-rule rounded-lg border border-rule bg-paper-raised">
-        {past.slice(0, 5).map((e) => (
-          <div key={e.billId} className="flex items-center gap-2 pr-1">
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  codeAlive(e)
-                    ? `/s/${e.code}${e.data.payerVpa ? `#pa=${encodeURIComponent(e.data.payerVpa)}` : ""}`
-                    : `/s#d=${encodeFragment(e.data)}`,
-                )
-              }
-              className="pressable flex min-h-13 min-w-0 flex-1 items-center gap-3 px-4 text-left hover:bg-paper"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">
-                  {e.data.merchant ?? "Bill split"}
-                </span>
-                <span className="block text-[11px] text-ink-faint">
-                  {new Date(e.createdAt).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                  {" · "}
-                  {e.data.people.length} people
-                  {codeAlive(e)
-                    ? ` · live, code ${e.code} (${daysLeft(e)}d left)`
-                    : " · saved on this device"}
-                </span>
-              </span>
-              <MoneyStatic paise={e.data.total} className="text-sm font-semibold" />
-            </button>
-            <button
-              type="button"
-              aria-label={`Remove ${e.data.merchant ?? "split"} from history`}
-              onClick={() => remove(e.billId)}
-              className="pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-faint hover:bg-ink/5"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
+    <section className="mt-2 rounded-lg border border-rule bg-paper-raised">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="pressable flex min-h-13 w-full items-center gap-2.5 px-4 text-sm font-semibold hover:bg-paper"
+      >
+        <History size={18} className="text-ink-faint" />
+        <span className="flex-1 text-left">Recent splits</span>
+        <span className="rounded-full border border-rule px-2 py-0.5 text-[11px] font-semibold text-ink-faint">
+          {past.length}
+        </span>
+        <ChevronDown
+          size={16}
+          className={clsx("text-ink-faint transition-transform duration-200", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <div className="banner-enter divide-y divide-rule border-t border-rule">
+          {past.map((e) => {
+            const confirming = confirmingId === e.billId;
+            return (
+              <div key={e.billId} className="flex items-center gap-2 pr-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      codeAlive(e)
+                        ? `/s/${e.code}${e.data.payerVpa ? `#pa=${encodeURIComponent(e.data.payerVpa)}` : ""}`
+                        : `/s#d=${encodeFragment(e.data)}`,
+                    )
+                  }
+                  className="pressable flex min-h-13 min-w-0 flex-1 items-center gap-3 px-4 text-left hover:bg-paper"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">
+                      {e.data.merchant ?? "Bill split"}
+                    </span>
+                    <span className="block text-[11px] text-ink-faint">
+                      {new Date(e.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      {" · "}
+                      {e.data.people.length} people
+                      {codeAlive(e)
+                        ? ` · live, code ${e.code} (${daysLeft(e)}d left)`
+                        : " · saved on this device"}
+                    </span>
+                  </span>
+                  <MoneyStatic paise={e.data.total} className="text-sm font-semibold" />
+                </button>
+                {confirming ? (
+                  <button
+                    type="button"
+                    aria-label={`Confirm removing ${e.data.merchant ?? "split"}`}
+                    onClick={() => {
+                      remove(e.billId);
+                      setConfirmingId(null);
+                    }}
+                    className="pressable banner-enter min-h-9 shrink-0 rounded-lg bg-settle-pending px-3 text-xs font-semibold text-white"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${e.data.merchant ?? "split"} from history`}
+                    onClick={() => setConfirmingId(e.billId)}
+                    className="pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-faint hover:bg-ink/5"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

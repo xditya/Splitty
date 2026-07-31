@@ -3,6 +3,7 @@
 export {
   Camera,
   Check,
+  ChevronDown,
   ChevronLeft,
   Clock,
   Copy,
