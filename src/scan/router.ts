@@ -44,10 +44,14 @@ export async function scanBill(
   }
 
   const done = (r: ScanResult): ScanResult => {
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify(r))
-    } catch {
-      /* storage full — cache is best-effort */
+    // an empty extraction is worthless — never cache it, so retrying the same
+    // photo (better light, different engine) gets a real second chance
+    if (r.items.length > 0) {
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(r))
+      } catch {
+        /* storage full — cache is best-effort */
+      }
     }
     return r
   }

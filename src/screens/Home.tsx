@@ -166,6 +166,15 @@ export function HomeScreen() {
     setStep("home");
     try {
       const result = await scanBill(f, setStatus);
+      if (result.items.length === 0) {
+        // the scan "worked" but found nothing bill-shaped — say so plainly
+        // instead of dumping the user on an empty items screen
+        toast("No bill details found in that photo. Try a clearer, closer shot — or type it in.", {
+          duration: 10000,
+          action: { label: "Enter manually", onClick: () => newBill() },
+        });
+        return;
+      }
       loadScan(result); // navigates to people/items
       if (result.engine === "tesseract" && !tesseractBannerDismissed) {
         // §4.3 — dismissible banner after a tier-3 result
