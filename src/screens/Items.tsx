@@ -7,7 +7,7 @@ import { reconcile } from '../lib/split'
 import { formatPaise, parseMoney } from '../lib/money'
 import { MoneyStatic } from '../components/Money'
 import { Button } from '../components/Button'
-import { AppBar, TwoPane } from '../components/Shell'
+import { AppBar, HomeButton, TwoPane } from '../components/Shell'
 import { Plus, X } from '../components/icons'
 import type { Category, ChargeKind, Item } from '../lib/types'
 import { clsx } from 'clsx'
@@ -202,12 +202,13 @@ export function ItemsScreen() {
         mainClassName="px-4 py-6 lg:px-0 lg:py-0"
         main={
           <>
-            <div className="flex items-center justify-between">
-              <h1 className="font-warm text-2xl">The bill</h1>
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="flex-1 font-warm text-2xl">The bill</h1>
               {/* §4.3 — engine badge sets accuracy expectations */}
               <span className="rounded-full border border-rule px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
                 {bill.engine === 'manual' ? 'manual entry' : bill.engine === 'tesseract' ? 'on-device scan' : bill.engine}
               </span>
+              <HomeButton className="lg:hidden" />
             </div>
 
             <input

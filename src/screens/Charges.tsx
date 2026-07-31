@@ -9,7 +9,7 @@ import { Money, MoneyStatic } from '../components/Money'
 import { Popover } from '../components/Popover'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { Button } from '../components/Button'
-import { AppBar, TwoPane } from '../components/Shell'
+import { AppBar, HomeButton, TwoPane } from '../components/Shell'
 import { PersonChip } from '../components/Chip'
 import { sum } from '../lib/money'
 import type { Charge, ChargeKind, SplitMode } from '../lib/types'
@@ -74,7 +74,10 @@ export function ChargesScreen() {
         mainClassName="px-4 py-6 lg:px-0 lg:py-0 pb-10"
         main={
           <>
-            <h1 className="font-warm text-2xl">Taxes & charges</h1>
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="font-warm text-2xl">Taxes & charges</h1>
+              <HomeButton className="lg:hidden" />
+            </div>
             <p className="mt-1 text-xs text-ink-faint">How should each one be divided?</p>
 
             <div className="mt-5 space-y-4">

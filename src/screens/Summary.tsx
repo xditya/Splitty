@@ -12,18 +12,18 @@ import { computeSplit } from '../lib/split'
 import { Money, MoneyStatic } from '../components/Money'
 import { PersonChip } from '../components/Chip'
 import { Button } from '../components/Button'
-import { AppBar, TwoPane } from '../components/Shell'
-import { Check, Clock, Copy, ImageDown, QrCode as QrIcon, Share2 } from '../components/icons'
+import { AppBar, HomeButton, TwoPane } from '../components/Shell'
+import { Check, Clock, Copy, ImageDown, Plus, QrCode as QrIcon, Share2 } from '../components/icons'
 import { iosAppLinks, platform, upiLink } from '../lib/upi'
 import { canInstall, isStandalone, requestInstall } from '../lib/pwa'
-import { codeShareUrl, createCodeShare, fragmentUrl, toShared } from '../share/codec'
+import { codeShareUrl, createCodeShare, fetchCodeShare, fragmentUrl, patchPaid, toShared } from '../share/codec'
 import { useHistory } from '../store/history'
 import { buildSplitText, renderSplitImage } from '../share/export'
 import type { Person } from '../lib/types'
 import { clsx } from 'clsx'
 
 export function SummaryScreen() {
-  const { bill, setStep, setPayer, setPayerVpa, markPaid, shareCode, setShareCode } = useBill()
+  const { bill, setStep, setPayer, setPayerVpa, markPaid, shareCode, setShareCode, newBill } = useBill()
   const settings = useSettings()
   const [qrPerson, setQrPerson] = useState<Person | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
@@ -39,6 +39,32 @@ export function SummaryScreen() {
     if (!bill.payerVpa && settings.payerVpa) setPayerVpa(settings.payerVpa)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Paid status is shared state once a code exists: pull the server's view
+  // every 15s so recipients marking themselves paid shows up HERE, on the
+  // payer's screen — not only on other recipients' screens.
+  useEffect(() => {
+    if (!shareCode) return
+    const sync = async () => {
+      const remote = await fetchCodeShare(shareCode)
+      if (!remote?.paid) return
+      const { bill: current, markPaid: apply } = useBill.getState()
+      for (const p of current.people) {
+        const remoteVal = !!remote.paid[p.id]
+        if (remoteVal !== !!current.paid[p.id]) apply(p.id, remoteVal)
+      }
+    }
+    void sync()
+    const t = setInterval(sync, 15000)
+    return () => clearInterval(t)
+  }, [shareCode])
+
+  // …and push local toggles up, so recipients' views update too.
+  const togglePaid = (personId: string) => {
+    const next = !bill.paid[personId]
+    markPaid(personId, next)
+    if (shareCode) void patchPaid(shareCode, personId, next)
+  }
 
   // Keep the device-local history snapshot current (visible on Home until —
   // and after — the 30-day share code expires).
@@ -78,11 +104,14 @@ export function SummaryScreen() {
     const code = shareCode ?? (await createCodeShare(toShared(bill)))
     if (code) setShareCode(code)
     setShareOpen(true)
-    return code ? codeShareUrl(code, vpa || null) : fragmentUrl(toShared(bill))
+    return {
+      code,
+      url: code ? codeShareUrl(code, vpa || null) : fragmentUrl(toShared(bill)),
+    }
   }
 
   const doShare = async () => {
-    const url = await buildShare()
+    const { url } = await buildShare()
     if (navigator.share) {
       try {
         await navigator.share({ title: 'Splitty — our split', url })
@@ -99,11 +128,13 @@ export function SummaryScreen() {
   // download fallback on desktop; text via share sheet or clipboard.
   const exportImage = async () => {
     try {
-      const blob = await renderSplitImage(bill)
+      const { url: link, code } = await buildShare()
+      // short typeable link on the image itself; fragment URLs are multi-KB
+      const blob = await renderSplitImage(bill, code ? `${location.host}/s/${code}` : null)
       const file = new File([blob], 'splitty-split.png', { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: 'Our bill split' })
+          await navigator.share({ files: [file], title: 'Our bill split', text: `Pay & track here: ${link}` })
           return
         } catch (e) {
           if ((e as Error).name === 'AbortError') return // user closed the sheet
@@ -123,7 +154,8 @@ export function SummaryScreen() {
   }
 
   const exportText = async () => {
-    const text = buildSplitText(bill)
+    const { url } = await buildShare()
+    const text = buildSplitText(bill, url)
     if (navigator.share) {
       try {
         await navigator.share({ text })
@@ -206,7 +238,7 @@ export function SummaryScreen() {
                   </Button>
                   <button
                     type="button"
-                    onClick={() => markPaid(p.id, !bill.paid[p.id])}
+                    onClick={() => togglePaid(p.id)}
                     aria-pressed={paid}
                     className={clsx(
                       'pressable flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold',
@@ -278,6 +310,18 @@ export function SummaryScreen() {
       <Button variant="ghost" full onClick={() => setStep('charges')}>
         Back to charges
       </Button>
+      {/* this bill is already snapshotted into Recent splits — safe to clear */}
+      <Button
+        full
+        className="border-dashed"
+        onClick={() => {
+          newBill()
+          setStep('home')
+        }}
+      >
+        <Plus size={16} className="text-ink-faint" />
+        Done — start a new split
+      </Button>
     </section>
   )
 
@@ -288,7 +332,10 @@ export function SummaryScreen() {
         mainClassName="px-4 py-6 lg:px-0 lg:py-0 pb-16"
         main={
           <>
-            <h1 className="font-warm text-2xl">Who owes what</h1>
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="font-warm text-2xl">Who owes what</h1>
+              <HomeButton className="lg:hidden" />
+            </div>
             {!split.invariantOk && (
               <div className="banner-enter mt-2 rounded-lg border border-settle-pending bg-red-50 px-3 py-2 text-xs text-settle-pending">
                 Totals don't reconcile — this is a bug, please re-check assignments.

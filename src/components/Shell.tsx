@@ -38,6 +38,23 @@ export function AppBar({
   )
 }
 
+/** Mobile flow screens: a home escape hatch beside the screen title (desktop
+    already gets one in the AppBar). The bill persists — Home offers Resume. */
+export function HomeButton({ className }: { className?: string }) {
+  const setStep = useBill((s) => s.setStep)
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      aria-label="Back to home"
+      className={className}
+      onClick={() => setStep('home')}
+    >
+      <House size={20} />
+    </Button>
+  )
+}
+
 export function TwoPane({
   main,
   aside,

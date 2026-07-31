@@ -74,7 +74,7 @@ export function buildExport(bill: Bill): ExportData {
 }
 
 /** Clean plain text for messengers that mangle images or as a copy fallback. */
-export function buildSplitText(bill: Bill): string {
+export function buildSplitText(bill: Bill, shareUrl?: string | null): string {
   const d = buildExport(bill)
   const lines: string[] = [`🧾 ${d.title}${d.subtitle ? ` · ${d.subtitle}` : ''} — split with Splitty`, '']
   for (const p of d.people) {
@@ -84,11 +84,18 @@ export function buildSplitText(bill: Bill): string {
   }
   lines.push(`Total — ${formatPaise(d.total)}`)
   if (d.payerLine) lines.push(d.payerLine)
+  if (shareUrl) {
+    lines.push('')
+    lines.push(`Pay & track here: ${shareUrl}`)
+  }
   return lines.join('\n')
 }
 
-/** Receipt-styled PNG, drawn on canvas. Thermal-paper vernacular (§15.1). */
-export async function renderSplitImage(bill: Bill): Promise<Blob> {
+/**
+ * Receipt-styled PNG, drawn on canvas. `shareLine` is an optional short,
+ * human-typeable link (host/s/CODE) — never a multi-KB fragment URL.
+ */
+export async function renderSplitImage(bill: Bill, shareLine?: string | null): Promise<Blob> {
   const d = buildExport(bill)
   const W = 720
   const PAD = 40
@@ -99,7 +106,7 @@ export async function renderSplitImage(bill: Bill): Promise<Blob> {
   // measure height
   let h = PAD + 56 + 30 // title + subtitle
   for (const p of d.people) h += 24 + 40 + p.rows.length * 30 + 8
-  h += 24 + 46 + (d.payerLine ? 28 : 0) + 44 + PAD // rule + total + payer + footer
+  h += 24 + 46 + (d.payerLine ? 28 : 0) + (shareLine ? 30 : 0) + 44 + PAD // rule + total + payer + link + footer
 
   const canvas = document.createElement('canvas')
   canvas.width = W * SCALE
@@ -202,6 +209,13 @@ export async function renderSplitImage(bill: Bill): Promise<Blob> {
     ctx.font = `13px ${MONO}`
     ctx.fillStyle = '#8a8177'
     ctx.fillText(ellipsize(d.payerLine, right - PAD), PAD, y)
+  }
+
+  if (shareLine) {
+    y += 30
+    ctx.font = `bold 15px ${MONO}`
+    ctx.fillStyle = '#2b2622'
+    ctx.fillText(ellipsize(`Pay & track: ${shareLine}`, right - PAD), PAD, y)
   }
 
   y += 34
