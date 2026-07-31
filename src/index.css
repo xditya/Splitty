@@ -1,0 +1,237 @@
+@import 'tailwindcss';
+
+/* PLAN.md §15.3 — motion tokens. Never ease-in on UI. */
+/* PLAN.md §15.1 — thermal-receipt vernacular: paper, ink, price rail. */
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --color-paper: #f6f3ee;
+  --color-paper-raised: #fffdf8;
+  --color-ink: #2b2622;
+  --color-ink-faint: #8a8177;
+  --color-rule: #e3ddd2;
+  --color-amber-flag: #d97706;
+  --color-settle-paid: #15803d;
+  --color-settle-pending: #b91c1c;
+
+  --font-mono: 'ui-monospace', 'SFMono-Regular', 'Cascadia Mono', 'Menlo', 'Consolas', monospace;
+  --font-warm: 'Georgia', 'Charter', 'Times New Roman', serif;
+}
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Native feel on touch: no double-tap zoom on tap targets (tap-to-assign is
+   rapid-fire — §8), no browser gesture latency. Rows keep their own pan-y. */
+button,
+a,
+input,
+select,
+textarea,
+label,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+/* iOS zooms the page when focusing inputs under 16px — pin form text to 16px
+   on touch devices so focus never zooms. Desktop keeps the compact sizes. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+/* §15.1 — money never jitters */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.font-warm {
+  font-family: var(--font-warm);
+  letter-spacing: -0.01em;
+}
+
+/* §15.2 / emil-design-eng — every pressable compresses. Feedback, not animation. */
+.pressable {
+  transition: transform 140ms var(--ease-out);
+}
+.pressable:active {
+  transform: scale(0.97);
+}
+.pressable-row:active {
+  transform: scale(0.985);
+}
+.pressable-row {
+  transition: transform 120ms var(--ease-out);
+}
+
+/* §15.2 — banners enter via @starting-style, 200ms ease-out */
+.banner-enter {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+@starting-style {
+  .banner-enter {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* §15.2 — one-time receipt reveal stagger; decorative, never blocks input */
+.receipt-reveal {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: receipt-in 250ms var(--ease-out) forwards;
+  animation-delay: calc(var(--reveal-i, 0) * 40ms);
+}
+@keyframes receipt-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Torn receipt edge (§15.1 signature) */
+.torn-edge {
+  --tooth: 12px;
+  mask-image: linear-gradient(black, black),
+    conic-gradient(from -45deg at 50% 100%, black 90deg, transparent 90deg);
+  mask-size:
+    100% calc(100% - var(--tooth)),
+    var(--tooth) var(--tooth);
+  mask-position:
+    top,
+    bottom;
+  mask-repeat: no-repeat, repeat-x;
+}
+
+/* §15.1 — people bar is a translucent material with a scroll-edge fade, not a border */
+.material-bar {
+  background: color-mix(in srgb, var(--color-paper) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.scroll-edge {
+  height: 12px;
+  background: linear-gradient(color-mix(in srgb, var(--color-ink) 7%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* §15.6 — accessibility floor */
+@media (prefers-reduced-transparency: reduce) {
+  .material-bar {
+    background: var(--color-paper);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .receipt-reveal {
+    animation: receipt-fade 200ms ease forwards;
+    transform: none;
+  }
+  @keyframes receipt-fade {
+    to {
+      opacity: 1;
+    }
+  }
+  .pressable:active,
+  .pressable-row:active {
+    transform: none;
+  }
+  .banner-enter {
+    transition: opacity 200ms ease;
+    transform: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .material-bar {
+    background: var(--color-paper);
+    border-bottom: 1px solid var(--color-ink);
+  }
+}
+
+/* Blocked-tap rejection: a quick head-shake "nope" (paired with a short
+   vibration where supported). Reduced motion: a colour flash, no movement. */
+.row-reject {
+  animation: row-reject 260ms var(--ease-out);
+}
+@keyframes row-reject {
+  20% {
+    transform: translateX(-5px);
+  }
+  45% {
+    transform: translateX(4px);
+  }
+  70% {
+    transform: translateX(-2px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-reject {
+    animation: row-reject-flash 300ms ease;
+  }
+  @keyframes row-reject-flash {
+    50% {
+      background-color: #fde68a;
+    }
+  }
+}
+
+/* Scan loader — a fast spinner reads as a fast app (emil-design-eng:
+   perceived performance). Progress bar animates transform only (§15.3). */
+.scan-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--color-rule);
+  border-top-color: var(--color-ink);
+  animation: scan-spin 650ms linear infinite;
+}
+@keyframes scan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.scan-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-rule);
+  overflow: hidden;
+}
+.scan-progress > div {
+  height: 100%;
+  background: var(--color-ink);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 200ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-spinner {
+    animation-duration: 1.8s; /* gentler, not gone — it still signals liveness */
+  }
+}
+
+/* Visible keyboard focus (§15.6) */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}

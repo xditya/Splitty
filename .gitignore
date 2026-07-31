@@ -1,0 +1,9 @@
+.agents/skills
+.claude/skills
+*-lock.json
+PLAN.md
+node_modules/
+dist/
+.env
+.env.local
+.vercel/
