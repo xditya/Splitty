@@ -55,6 +55,10 @@ export function rawToScanResult(raw: RawExtraction, engine: EngineTag): ScanResu
   }
 }
 
+// A scan that hasn't answered in this long is effectively dead — fail loudly
+// (toast + on-device fallback) instead of spinning forever.
+const GEMINI_TIMEOUT_MS = 40_000
+
 /** Tier 1 — browser → Google directly. */
 export async function scanWithUserKey(base64: string, key: string, model: string): Promise<ScanResult> {
   let res: Response
@@ -62,10 +66,15 @@ export async function scanWithUserKey(base64: string, key: string, model: string
     res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${encodeURIComponent(key)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(geminiRequestBody(base64)),
+      body: JSON.stringify(geminiRequestBody(base64, model)),
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     })
-  } catch {
-    throw new ScanError('network')
+  } catch (e) {
+    throw new ScanError(
+      'network',
+      undefined,
+      (e as Error).name === 'TimeoutError' ? `no answer after ${GEMINI_TIMEOUT_MS / 1000}s` : undefined,
+    )
   }
   if (res.status === 401 || res.status === 403) {
     if (res.status === 401) clearUserKey() // §11 — auto-clear on 401
@@ -90,6 +99,7 @@ export async function scanWithSharedKey(base64: string, width: number, height: n
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ image: base64, width, height }),
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     })
   } catch {
     throw new ScanError('network')

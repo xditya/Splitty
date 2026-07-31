@@ -1,7 +1,7 @@
 // PLAN.md §1 — scan → assign → settle. Manual entry is a first-class path;
 // there is no state where the app shows an error and stops.
 // Hierarchy (craft R4): ONE hero action — Scan. Everything else is quieter.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useBill } from "../store/bill";
@@ -35,8 +35,19 @@ export function HomeScreen() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<ScanStatus | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const billInProgress = bill.items.length > 0 || bill.people.length > 0;
   const installable = useInstallable(); // quiet landing-page affordance only
+
+  // a visible clock is the difference between "working" and "died"
+  useEffect(() => {
+    if (!status) {
+      setElapsed(0);
+      return;
+    }
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [status !== null]);
 
   const onFile = async (f: File | null) => {
     if (!f) return;
@@ -236,7 +247,11 @@ export function HomeScreen() {
         >
           <div className="banner-enter w-full max-w-xs rounded-xl bg-paper-raised p-5 text-center shadow-xl">
             <div className="scan-spinner mx-auto" aria-hidden />
-            <p className="mt-4 text-sm font-semibold">{statusLine(status)}</p>
+            <p className="mt-4 text-sm font-semibold">
+              {elapsed >= 10 && status.phase === "scanning"
+                ? `Still reading… ${elapsed}s`
+                : statusLine(status)}
+            </p>
             {scanProgress !== null && (
               <div className="scan-progress mt-3">
                 <div

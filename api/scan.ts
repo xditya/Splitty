@@ -54,14 +54,20 @@ export default async function handler(req: Request): Promise<Response> {
   if (!key) return Response.json({ error: 'quota' }, { status: 429 })
 
   const model = process.env.SHARED_GEMINI_MODEL ?? 'gemini-3.5-flash-lite'
-  const upstream = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(geminiRequestBody(image)),
-    },
-  )
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(geminiRequestBody(image, model)),
+        signal: AbortSignal.timeout(40_000),
+      },
+    )
+  } catch {
+    return Response.json({ error: 'upstream timeout' }, { status: 502 })
+  }
 
   if (upstream.status === 429 || upstream.status === 403) {
     // Gemini quota gone for the day — distinct from our own flood limiter (§4.3)

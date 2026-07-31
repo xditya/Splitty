@@ -79,7 +79,12 @@ export interface RawExtraction {
   total?: number | null
 }
 
-export function geminiRequestBody(base64Jpeg: string) {
+export function geminiRequestBody(base64Jpeg: string, model?: string) {
+  // Receipt extraction is mechanical — reasoning adds tens of seconds of
+  // latency for no accuracy gain. Gemini 3.x defaults some models to medium
+  // thinking; force minimal. (2.5-era models use a different, incompatible
+  // param, so only send this for 3.x+ model ids.)
+  const supportsThinkingLevel = model ? /^gemini-([3-9]|\d{2,})/.test(model) : false
   return {
     contents: [
       {
@@ -93,6 +98,7 @@ export function geminiRequestBody(base64Jpeg: string) {
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0,
+      ...(supportsThinkingLevel ? { thinking_level: 'minimal' } : {}),
     },
   }
 }
