@@ -39,9 +39,11 @@ interface SettingsState {
 
 // Fallback list only — Settings fetches the key's real model list (ListModels)
 // so retired IDs (e.g. the 2.5 family, closed to new users) can't brick scans.
+// 3.6-flash is the default: measured ~2.6s for extraction, while 3.5-flash-lite
+// was observed hanging >60s on 2026-07-31 (even on trivial prompts).
 export const MODELS = [
-  { id: 'gemini-3.5-flash-lite', label: 'Flash-Lite 3.5 (fastest, most free quota)' },
-  { id: 'gemini-3.6-flash', label: 'Flash 3.6 (more accurate)' },
+  { id: 'gemini-3.6-flash', label: 'Flash 3.6 (fast + accurate)' },
+  { id: 'gemini-3.5-flash-lite', label: 'Flash-Lite 3.5 (most free quota)' },
 ]
 
 export const useSettings = create<SettingsState>()(
@@ -67,11 +69,15 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: 'splitty:settings',
-      version: 1,
-      // retire persisted 2.5-family model ids (closed to new users, 404s)
+      version: 2,
+      // v1: retire persisted 2.5-family ids (closed to new users, 404s)
+      // v2: move everyone off 3.5-flash-lite — it was the old default and is
+      //     hanging server-side; users can still reselect it in Settings
       migrate: (persisted) => {
         const s = persisted as Partial<SettingsState>
-        if (s.model?.startsWith('gemini-2.5')) s.model = MODELS[0].id
+        if (s.model?.startsWith('gemini-2.5') || s.model === 'gemini-3.5-flash-lite') {
+          s.model = MODELS[0].id
+        }
         return s
       },
     },

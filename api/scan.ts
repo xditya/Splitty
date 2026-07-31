@@ -53,7 +53,7 @@ export default async function handler(req: Request): Promise<Response> {
   const key = process.env.SHARED_GEMINI_KEY
   if (!key) return Response.json({ error: 'quota' }, { status: 429 })
 
-  const model = process.env.SHARED_GEMINI_MODEL ?? 'gemini-3.5-flash-lite'
+  const model = process.env.SHARED_GEMINI_MODEL ?? 'gemini-3.6-flash'
   let upstream: Response
   try {
     upstream = await fetch(

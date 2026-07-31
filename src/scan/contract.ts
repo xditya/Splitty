@@ -98,7 +98,7 @@ export function geminiRequestBody(base64Jpeg: string, model?: string) {
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0,
-      ...(supportsThinkingLevel ? { thinking_level: 'minimal' } : {}),
+      ...(supportsThinkingLevel ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
     },
   }
 }

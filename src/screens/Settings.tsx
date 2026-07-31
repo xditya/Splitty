@@ -44,9 +44,9 @@ export function SettingsScreen() {
       setUserKey(value.trim(), remember);
       if (models.length > 0) {
         s.setAvailableModels(models);
-        // if the saved model isn't usable by this key, pick the lite tier
+        // if the saved model isn't usable by this key, prefer the fast flash tier
         if (!models.includes(s.model)) {
-          s.setModel(models.find((m) => m.includes("lite")) ?? models[0]);
+          s.setModel(models.find((m) => m === "gemini-3.6-flash") ?? models[0]);
         }
       }
     }
