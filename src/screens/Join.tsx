@@ -40,6 +40,10 @@ export function JoinScreen() {
       <div className="mt-6">
         <OTPInput
           maxLength={6}
+          inputMode="text"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
           value={code}
           onChange={(v) => {
             const up = v.toUpperCase()
