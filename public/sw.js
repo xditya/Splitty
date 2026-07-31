@@ -1,7 +1,8 @@
-// PLAN.md §16 M7 — minimal offline shell. Cache-first for the app shell and
-// hashed assets; network passthrough for /api and Gemini. The split engine and
-// manual entry work fully offline (§1 "never broken").
-const CACHE = 'splitty-shell-v1'
+// Minimal offline shell. Cache-first for the app shell and hashed assets;
+// network passthrough for /api and cross-origin. Every respondWith() path
+// must settle — a rejected handler surfaces as NS_ERROR_INTERCEPTION_FAILED
+// and breaks loads harder than having no service worker at all.
+const CACHE = 'splitty-shell-v2'
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg']
 
 self.addEventListener('install', (e) => {
@@ -16,24 +17,40 @@ self.addEventListener('activate', (e) => {
   self.clients.claim()
 })
 
+async function assetResponse(request) {
+  const cached = await caches.match(request)
+  if (cached) return cached
+  try {
+    const res = await fetch(request)
+    if (res.ok) {
+      const copy = res.clone()
+      const cache = await caches.open(CACHE)
+      await cache.put(request, copy)
+    }
+    return res
+  } catch {
+    // network died mid-flight and nothing cached: settle with a proper
+    // network-error response instead of rejecting the handler
+    return Response.error()
+  }
+}
+
+async function navigationResponse(request) {
+  try {
+    return await fetch(request)
+  } catch {
+    const cached = await caches.match('/')
+    return cached ?? Response.error()
+  }
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
   if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return
 
-  // hashed assets: cache-first; navigation: network-first with shell fallback
   if (url.pathname.startsWith('/assets/')) {
-    e.respondWith(
-      caches.match(e.request).then(
-        (hit) =>
-          hit ??
-          fetch(e.request).then((res) => {
-            const copy = res.clone()
-            caches.open(CACHE).then((c) => c.put(e.request, copy))
-            return res
-          }),
-      ),
-    )
+    e.respondWith(assetResponse(e.request))
   } else if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).catch(() => caches.match('/')))
+    e.respondWith(navigationResponse(e.request))
   }
 })
