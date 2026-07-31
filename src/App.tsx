@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import { Analytics } from '@vercel/analytics/react'
 import { InstallSheet } from './components/InstallSheet'
 import { useBill } from './store/bill'
 import { HomeScreen } from './screens/Home'
@@ -43,6 +44,9 @@ export default function App() {
       </Routes>
       <Toaster position="top-center" />
       <InstallSheet />
+      {/* Vercel Analytics: cookieless, served from our own domain
+          (/_vercel/insights/*), so the §13 CSP needs no new origins */}
+      <Analytics />
     </BrowserRouter>
   )
 }
