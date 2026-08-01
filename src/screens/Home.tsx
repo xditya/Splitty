@@ -22,7 +22,7 @@ import {
 } from "../components/icons";
 import { GithubIcon } from "../components/GithubIcon";
 import { requestInstall, useInstallable } from "../lib/pwa";
-import { ChevronDown, History, X } from "../components/icons";
+import { ChevronDown, History, Trash2, X } from "../components/icons";
 import { MoneyStatic } from "../components/Money";
 import { codeAlive, daysLeft, useHistory } from "../store/history";
 import { encodeFragment } from "../share/codec";
@@ -148,6 +148,14 @@ export function HomeScreen() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<ScanStatus | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  // armed discard disarms itself, same as history deletes
+  useEffect(() => {
+    if (!confirmDiscard) return;
+    const t = setTimeout(() => setConfirmDiscard(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDiscard]);
   const billInProgress = bill.items.length > 0 || bill.people.length > 0;
   const installable = useInstallable(); // quiet landing-page affordance only
 
@@ -361,13 +369,39 @@ export function HomeScreen() {
         </div>
 
         {billInProgress && (
-          <Button
-            className="banner-enter mt-2 border-dashed"
-            onClick={() => setStep(bill.items.length > 0 ? "assign" : "people")}
-          >
-            <Undo2 size={16} className="text-ink-faint" />
-            Resume the bill in progress
-          </Button>
+          <div className="banner-enter mt-2 flex gap-2">
+            <Button
+              className="flex-1 border-dashed"
+              onClick={() => setStep(bill.items.length > 0 ? "assign" : "people")}
+            >
+              <Undo2 size={16} className="text-ink-faint" />
+              Resume the bill in progress
+            </Button>
+            {confirmDiscard ? (
+              <button
+                type="button"
+                aria-label="Confirm discarding this bill"
+                onClick={() => {
+                  newBill();
+                  setStep("home");
+                  setConfirmDiscard(false);
+                  toast("Bill discarded.");
+                }}
+                className="pressable banner-enter min-h-11 rounded-lg bg-settle-pending px-3 text-xs font-semibold text-white"
+              >
+                Discard
+              </button>
+            ) : (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Discard the bill in progress"
+                onClick={() => setConfirmDiscard(true)}
+              >
+                <Trash2 size={16} />
+              </Button>
+            )}
+          </div>
         )}
 
         <RecentSplits />
