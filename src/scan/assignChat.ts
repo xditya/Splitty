@@ -46,7 +46,12 @@ export async function chatAssign(
       body: JSON.stringify({ message, people, items }),
       signal: AbortSignal.timeout(30_000),
     })
+    // a static host (local preview) has no /api — surface that as its own
+    // case so the UI can point at the BYOK fix instead of a vague failure
+    if (res.status === 404 || res.status === 405) throw new Error('no-backend')
+    if (res.status === 429) throw new Error('busy')
     if (!res.ok) throw new Error(`AI request failed (HTTP ${res.status})`)
+    if (!(res.headers.get('content-type') ?? '').includes('json')) throw new Error('no-backend')
     raw = (await res.json()) as RawAssign
   }
   return validateProposals(raw, people, items)

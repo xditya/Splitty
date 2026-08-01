@@ -2,6 +2,7 @@
 // proposed share map, confirm to apply. Nothing touches the bill until the
 // user confirms — the proposal card is the approval step.
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Drawer } from 'vaul'
 import { toast } from 'sonner'
 import { useBill } from '../store/bill'
@@ -14,6 +15,7 @@ import { Send } from './icons'
 
 export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { bill, applyShares } = useBill()
+  const navigate = useNavigate()
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ proposals: AssignProposal[]; note: string | null } | null>(null)
@@ -32,7 +34,17 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
       }
     } catch (e) {
       console.error('[splitty] chat assign failed:', e)
-      toast.error('Could not reach the AI — assign by tapping instead.')
+      const reason = e instanceof Error ? e.message : ''
+      if (reason === 'no-backend') {
+        toast.error('Chat needs an AI: add your free Gemini key in Settings.', {
+          duration: 10000,
+          action: { label: 'Settings', onClick: () => navigate('/settings') },
+        })
+      } else if (reason === 'busy') {
+        toast.error('Free AI is busy right now — try again in a minute, or assign by tapping.')
+      } else {
+        toast.error(`Chat failed (${reason || 'unknown'}) — assign by tapping instead.`)
+      }
     } finally {
       setBusy(false)
     }
