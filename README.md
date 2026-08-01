@@ -2,49 +2,64 @@
 
 **Scan a restaurant bill. Tap who had what. Everyone pays their share over UPI.**
 
-A zero-backend-state web app for the moment six people finish dinner, one person paid, and nobody
-wants to do arithmetic. Photograph the bill, get structured line items, assign them with taps,
-split taxes correctly (including liquor VAT scoped to drinkers), and settle with per-person UPI
-QR codes.
+Six people finish dinner, one person paid, and nobody wants to do arithmetic. Splitty is a web
+app with no backend state for exactly that moment: photograph the bill, get structured line
+items, assign them with taps, split the taxes correctly (liquor VAT only hits the drinkers), and
+settle with a UPI QR per person.
 
-| Home | Assigning | Charges | Settle up |
-| --- | --- | --- | --- |
-| ![Home screen](docs/screenshots/home.png) | ![Assignment screen](docs/screenshots/assign.png) | ![Charges screen](docs/screenshots/charges.png) | ![Summary screen](docs/screenshots/summary.png) |
+| Home | Assigning | Assign by chat | Charges | Settle up |
+| --- | --- | --- | --- | --- |
+| ![Home screen](docs/screenshots/home.png) | ![Assignment screen](docs/screenshots/assign.png) | ![Chat assignment](docs/screenshots/chat.png) | ![Charges screen](docs/screenshots/charges.png) | ![Summary screen](docs/screenshots/summary.png) |
 
-On desktop the flow re-composes into two panes — receipt on the left, people/totals/actions in a
-sticky aside:
+On desktop the same flow spreads into two panes, receipt on the left with people, totals, and
+actions in a sticky aside:
 
 ![Desktop assignment view](docs/screenshots/desktop-assign.png)
 
 ## Why it's different
 
-- **Never broken.** Three scan tiers with silent fallback: your own Gemini key (browser → Google
-  directly), a shared free-tier proxy, and on-device OCR (tesseract.js WASM). If everything is
-  down, manual entry still works. There is no dead end.
-- **Assignment is the product.** A multi-select "brush" in a bottom tray: pick one person and tap
-  their items; pick two and each tap makes them **share one unit** (two people on one of three
-  beers = ½ each, exact money). Fraction badges, per-item "2 of 3 assigned" progress, vibration +
-  shake when a tap isn't possible.
-- **The money reconciles, always.** Every division goes through one largest-remainder allocator —
-  per-person totals sum to the bill total **to the paisa**, enforced by an invariant and a
-  1000-run fuzz test. All money is integer paise; floats never touch an amount.
-- **Indian bills, done right.** CGST+SGST collapse into one GST decision; liquor VAT is scoped to
-  the people who actually drank; the service charge comes with a "not mandatory (CCPA 2022)"
-  note and a one-tap remove.
-- **Honest privacy.** Nothing is stored server-side except a shared split (30-day TTL) — no
-  images, no API keys, no UPI IDs. Payment details ride in URL fragments, which never leave the
-  browser. An "always on-device" toggle keeps photos on your phone entirely.
+It never dead-ends. Scanning tries your own Gemini key first (straight from the browser to
+Google), then a shared free-tier proxy, then on-device OCR with tesseract.js WASM. If all three
+are down you can still type the bill in by hand.
+
+Assignment is the part competitors get wrong, so most of the work went there. You select whoever
+shared a thing in the bottom tray and tap the thing: it splits evenly among them in one tap.
+Long-pressing an item opens exact portions with half-unit steppers, for nights when someone had
+two and two people shared one. Tapping a name badge takes that person off an item, swiping left
+clears it, and a single-level undo covers every change. When a tap can't do anything, the row
+shakes and the phone buzzes instead of silently ignoring you.
+
+If tapping is too much work, tap Chat and type "Asha ate the biryani, Ben and Chitra shared the
+naan, everyone split the fries". The AI replies with a per-item proposal card, and nothing is
+applied until you confirm it. This works with your own key or through the shared server tier.
+
+The money always reconciles. Every division runs through one largest-remainder allocator, so
+per-person totals sum to the bill total to the paisa. An invariant check and a 1000-run fuzz
+test enforce it, and amounts are integer paise everywhere; floats never touch money.
+
+Indian bills are handled properly: CGST and SGST collapse into a single GST decision, liquor VAT
+is scoped to the people who drank, and the service charge carries a note that it isn't mandatory
+(CCPA guidelines, 2022) next to a one-tap remove button.
+
+Privacy claims here are literal, not aspirational. The server stores nothing except a shared
+split with a 30-day TTL. No images, no API keys, no UPI IDs. Payment details travel in URL
+fragments, which never leave the browser, and an "always on-device" toggle keeps photos on your
+phone entirely.
 
 ## Settling up
 
-- **Per-person UPI QR:** tap a person → full-screen QR with their exact amount — they scan it from
-  any UPI app. Android also gets a direct `upi://` intent button; iOS gets per-app buttons
-  (GPay / PhonePe / Paytm).
-- **Share the split:** one QR/link for the table — via a 6-char code (Vercel KV) or a fully
-  serverless `lz-string` URL fragment. Recipients see live paid/pending status and can mark
-  themselves paid.
-- **Export:** a receipt-styled PNG of the whole breakdown (canvas-drawn, per person with share
-  fractions) straight to WhatsApp via the native share sheet, or clean plain text.
+- Tap a person and a full-screen QR appears with their exact amount, ready to scan from any UPI
+  app. Android also gets a direct `upi://` intent button; iOS gets per-app buttons for GPay,
+  PhonePe, and Paytm.
+- One QR or link shares the whole split with the table, either as a 6-char code backed by Vercel
+  KV or as a fully serverless `lz-string` URL fragment. Paid status syncs live in both
+  directions, and sharing again after edits updates the stored split under the same code (only
+  the creator's device holds the write key).
+- Exports go out as a receipt-styled PNG drawn on a canvas, per person with share fractions and
+  the share link printed on it, straight to WhatsApp through the native share sheet. A clean
+  plain-text version covers everything else.
+- Recent splits stay on the device: live through their code for its 30-day life, then from the
+  local snapshot. The app installs as a PWA on iOS, Android, and desktop.
 
 ## Stack
 
@@ -62,35 +77,35 @@ npm test           # split-engine suite incl. the paisa-exactness fuzz test
 npm run build      # type-check + production build
 ```
 
-The serverless pieces (`api/`) only run when deployed (or under `vercel dev`):
-shared-key scanning with rate limiting, and code-based shares.
+The serverless pieces in `api/` only run when deployed (or under `vercel dev`): shared-key
+scanning and chat with rate limiting, plus code-based shares.
 
 ## Deploying to Vercel
 
 1. Import the repo (framework: Vite). `vercel.json` carries the SPA rewrites and CSP headers.
-2. **Storage → Create Database → Upstash for Redis**, connect it to the project — this injects
-   `KV_REST_API_URL` / `KV_REST_API_TOKEN` automatically.
+2. Storage → Create Database → Upstash for Redis, then connect it to the project. This injects
+   `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you.
 3. Add the remaining environment variables (see `.env.example`):
 
    | Variable | Purpose |
    | --- | --- |
-   | `SHARED_GEMINI_KEY` | Free-tier Google AI Studio key. **Use a project with billing disabled** — worst case abuse then costs quota, not money |
-   | `SHARED_GEMINI_MODEL` | Optional; defaults to `gemini-3.5-flash-lite` |
+   | `SHARED_GEMINI_KEY` | Free-tier Google AI Studio key. Use a project with billing disabled, so worst-case abuse costs quota, not money |
+   | `SHARED_GEMINI_MODEL` | Optional; defaults to `gemini-3.6-flash` |
    | `DISABLE_RATE_LIMIT` | `true` only for local testing |
 
-4. Deploy. The scan proxy is rate-limited to 3/IP/min; KV stores only rate-limit counters and
-   computed splits.
+4. Deploy. The scan proxy is rate-limited to 3 requests per IP per minute, and KV stores only
+   rate-limit counters and computed splits.
 
 ## Project layout
 
 ```
 src/lib/        split engine (allocate, computeSplit), money, UPI links, unit helpers
 src/scan/       preprocess → engine router → gemini / tesseract + geometric layout parser
-src/store/      zustand stores (bill, settings)
+src/store/      zustand stores (bill, settings, history)
 src/screens/    Home · People · Items · Assign · Charges · Summary · Settings · Join · Shared
 src/share/      lz-string codec, PNG/text export
-api/            Edge functions: /api/scan (rate-limited proxy), /api/split (+/:code)
+api/            Edge functions: /api/scan + /api/assign (rate-limited proxies), /api/split (+/:code)
 ```
 
-Tests: `npx vitest run` — engine allocation cases, geometric parser, share codec round-trip.
-API functions type-check via `npx tsc -p tsconfig.api.json`.
+Tests run with `npx vitest run` and cover the engine allocation cases, the geometric parser, and
+the share codec round-trip. API functions type-check via `npx tsc -p tsconfig.api.json`.
