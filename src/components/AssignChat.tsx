@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { Drawer } from 'vaul'
 import { toast } from 'sonner'
 import { useBill } from '../store/bill'
+import { getUserKey } from '../store/settings'
 import { chatAssign } from '../scan/assignChat'
 import type { AssignProposal } from '../scan/assignContract'
 import { unitsLabel } from '../lib/units'
@@ -18,32 +19,33 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
   const navigate = useNavigate()
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ proposals: AssignProposal[]; note: string | null } | null>(null)
+  const hasKey = !!getUserKey()
 
   const send = async () => {
     const text = message.trim()
     if (!text || busy) return
     setBusy(true)
     setResult(null)
+    setError(null)
     try {
       const r = await chatAssign(text, bill)
       if (r.proposals.length === 0) {
-        toast(r.note ?? "Couldn't match that to any items — try naming them like on the bill.")
+        setError(r.note ?? "Couldn't match that to any items — try naming them like on the bill.")
       } else {
         setResult(r)
       }
     } catch (e) {
+      // errors render INSIDE the sheet — toasts hide behind phone keyboards
       console.error('[splitty] chat assign failed:', e)
       const reason = e instanceof Error ? e.message : ''
       if (reason === 'no-backend') {
-        toast.error('Chat needs an AI: add your free Gemini key in Settings.', {
-          duration: 10000,
-          action: { label: 'Settings', onClick: () => navigate('/settings') },
-        })
+        setError('No AI available here: this preview has no server, so chat needs your own Gemini key.')
       } else if (reason === 'busy') {
-        toast.error('Free AI is busy right now — try again in a minute, or assign by tapping.')
+        setError('The free AI is busy right now — try again in a minute, or assign by tapping.')
       } else {
-        toast.error(`Chat failed (${reason || 'unknown'}) — assign by tapping instead.`)
+        setError(`Chat failed (${reason || 'unknown'}) — assign by tapping instead.`)
       }
     } finally {
       setBusy(false)
@@ -80,6 +82,20 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
             split the fries". Nothing changes until you confirm.
           </p>
 
+          {!hasKey && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenChange(false)
+                navigate('/settings')
+              }}
+              className="pressable mt-2 w-full rounded-lg border border-amber-flag/40 bg-amber-50 px-3 py-2 text-left text-xs leading-relaxed text-amber-flag"
+            >
+              No Gemini key on this device — chat will only work where the free server tier is
+              available. <span className="font-semibold underline">Add your key in Settings</span>
+            </button>
+          )}
+
           <div className="mt-3 flex gap-2">
             <input
               value={message}
@@ -96,6 +112,12 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
           </div>
 
           {busy && <p className="mt-3 text-xs text-ink-faint">Working out the split…</p>}
+
+          {error && (
+            <p className="banner-enter mt-3 rounded-lg border border-settle-pending/40 bg-red-50 px-3 py-2 text-xs leading-relaxed text-settle-pending">
+              {error}
+            </p>
+          )}
 
           {result && (
             <div className="banner-enter mt-3">
