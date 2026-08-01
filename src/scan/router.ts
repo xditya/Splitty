@@ -18,9 +18,13 @@ export type ScanStatus =
     }
   | { phase: 'flood-wait'; secondsLeft: number }
 
+/** Asks the user whether to continue with on-device OCR; resolves false to abort. */
+export type ConfirmOcrFallback = (reason: 'quota' | 'auth') => Promise<boolean>
+
 export async function scanBill(
   file: File | Blob,
   onStatus: (s: ScanStatus) => void,
+  confirmOcrFallback?: ConfirmOcrFallback,
 ): Promise<ScanResult> {
   onStatus({ phase: 'preprocess' })
   const pre = await preprocess(file)
@@ -71,12 +75,16 @@ export async function scanBill(
       onStatus({ phase: 'scanning', engine: 'gemini-user' })
       return done(await scanWithUserKey(pre.base64, userKey, model))
     } catch (e) {
-      // any tier-1 failure → tier 3 (tier 2 would spend shared quota on a BYOK
-      // user). NOT silent anymore: name the reason so a broken key/model/quota
-      // can't masquerade as "the app just prefers on-device".
+      // tier-1 failure → tier 3 (tier 2 would spend shared quota on a BYOK
+      // user). Exhausted/broken keys ASK before the slower on-device scan;
+      // transient failures (network, parse) still fall through silently.
       const msg = e instanceof Error ? e.message : String(e)
       console.error('[splitty] Gemini (your key) failed, falling back to on-device:', e)
-      toast.error(`Gemini scan failed — ${msg}. Scanning on-device instead.`, { duration: 10000 })
+      if (e instanceof ScanError && (e.reason === 'quota' || e.reason === 'auth') && confirmOcrFallback) {
+        if (!(await confirmOcrFallback(e.reason))) throw new ScanError('cancelled')
+      } else {
+        toast.error(`Gemini scan failed — ${msg}. Scanning on-device instead.`, { duration: 10000 })
+      }
       onStatus({ phase: 'scanning', engine: 'tesseract' })
       return done(
         await scanWithTesseract(pre.blob, (step, progress) =>
@@ -106,6 +114,11 @@ export async function scanBill(
       } catch {
         /* fall through to tesseract */
       }
+    }
+    // shared quota gone for the day: that's a decision, not a blip — ask
+    // before the slower on-device scan instead of silently switching
+    if (e instanceof ScanError && e.reason === 'quota' && confirmOcrFallback) {
+      if (!(await confirmOcrFallback('quota'))) throw new ScanError('cancelled')
     }
     onStatus({ phase: 'scanning', engine: 'tesseract' })
     return done(

@@ -8,7 +8,7 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 export class ScanError extends Error {
   constructor(
-    public reason: 'flood' | 'quota' | 'auth' | 'network' | 'parse',
+    public reason: 'flood' | 'quota' | 'auth' | 'network' | 'parse' | 'cancelled',
     public retryAfter?: number,
     detail?: string,
   ) {

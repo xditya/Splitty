@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useBill } from "../store/bill";
 import { getUserKey, useSettings } from "../store/settings";
 import { scanBill, type ScanStatus } from "../scan/router";
+import { ScanError } from "../scan/gemini";
 import { Popover } from "../components/Popover";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { Button } from "../components/Button";
@@ -160,12 +161,38 @@ export function HomeScreen() {
     return () => clearInterval(t);
   }, [status !== null]);
 
+  // Exhausted/broken AI keys ask before the slower on-device scan (§4.3
+  // exception): hide the busy overlay, put the choice in a sticky toast.
+  const confirmOcrFallback = (reason: "quota" | "auth") =>
+    new Promise<boolean>((resolve) => {
+      setStatus(null);
+      let settled = false;
+      const answer = (v: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(v);
+        }
+      };
+      toast(
+        reason === "auth"
+          ? "Your API key stopped working."
+          : "The AI scan quota is used up right now.",
+        {
+          description: "Read the bill on this phone instead? A bit slower and less accurate.",
+          duration: Infinity,
+          action: { label: "Scan on device", onClick: () => answer(true) },
+          cancel: { label: "Not now", onClick: () => answer(false) },
+          onDismiss: () => answer(false),
+        },
+      );
+    });
+
   const onFile = async (f: File | null) => {
     if (!f) return;
     newBill();
     setStep("home");
     try {
-      const result = await scanBill(f, setStatus);
+      const result = await scanBill(f, setStatus, confirmOcrFallback);
       if (result.items.length === 0) {
         // the scan "worked" but found nothing bill-shaped — say so plainly
         // instead of dumping the user on an empty items screen
@@ -187,7 +214,15 @@ export function HomeScreen() {
         );
       }
     } catch (e) {
-      // §1 principle 1 — never broken: OCR died entirely, manual entry still works
+      if (e instanceof ScanError && e.reason === "cancelled") {
+        // user declined the on-device fallback — leave them in charge
+        toast("Scan stopped. Add a key in Settings, retry later, or type the bill in.", {
+          duration: 10000,
+          action: { label: "Enter manually", onClick: () => newBill() },
+        });
+        return;
+      }
+      // never broken: OCR died entirely, manual entry still works
       console.error("[splitty] scan failed:", e);
       toast("Could not read the photo — enter the bill manually.", {
         duration: 8000,
