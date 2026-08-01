@@ -22,11 +22,17 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ proposals: AssignProposal[]; note: string | null } | null>(null)
   const hasKey = !!getUserKey()
-  const outcomeRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
-  // whatever the AI answered must end up on screen, keyboard or not
+  // Reveal the answer by scrolling the SHEET ITSELF to its end (result +
+  // actions + input live at the bottom). Never scrollIntoView — iOS scrolls
+  // the scroll-locked page behind the drawer and drags the sheet askew.
   useEffect(() => {
-    if (result || error) outcomeRef.current?.scrollIntoView({ block: 'nearest' })
+    if (result || error) {
+      requestAnimationFrame(() => {
+        contentRef.current?.scrollTo({ top: contentRef.current.scrollHeight })
+      })
+    }
   }, [result, error])
 
   const send = async () => {
@@ -82,7 +88,10 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
     >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
+        <Drawer.Content
+          ref={contentRef}
+          className="fixed inset-x-0 bottom-0 z-40 max-h-[80svh] overflow-y-auto rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md"
+        >
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
           <Drawer.Title className="font-warm text-lg">Assign by chat</Drawer.Title>
           <p className="mt-1 text-xs leading-relaxed text-ink-faint">
@@ -93,7 +102,7 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
           {/* outcome lives ABOVE the composer, in plain document flow: no
               flex-basis tricks — WebKit collapses basis-0 areas inside
               content-sized sheets to zero height (invisible responses) */}
-          <div ref={outcomeRef}>
+          <div>
             {!hasKey && (
               <button
                 type="button"
