@@ -82,8 +82,11 @@ export function fragmentVpa(): string | null {
   return m ? decodeURIComponent(m[1]) : null
 }
 
-/** §9 — server share. VPA stripped: never stored server-side (§10.5). */
-export async function createCodeShare(s: SharedSplit): Promise<string | null> {
+/** §9 — server share. VPA stripped: never stored server-side (§10.5).
+    The returned writeKey stays on this device and authorizes later updates. */
+export async function createCodeShare(
+  s: SharedSplit,
+): Promise<{ code: string; writeKey: string } | null> {
   try {
     const res = await fetch('/api/split', {
       method: 'POST',
@@ -91,10 +94,27 @@ export async function createCodeShare(s: SharedSplit): Promise<string | null> {
       body: JSON.stringify({ ...s, payerVpa: null }),
     })
     if (!res.ok) return null
-    const { code } = (await res.json()) as { code: string }
-    return code
+    return (await res.json()) as { code: string; writeKey: string }
   } catch {
     return null
+  }
+}
+
+/** Overwrite the stored split under the same code ("share again" after edits). */
+export async function updateCodeShare(
+  code: string,
+  writeKey: string,
+  s: SharedSplit,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/split/${code}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ writeKey, split: { ...s, payerVpa: null } }),
+    })
+    return res.ok
+  } catch {
+    return false
   }
 }
 

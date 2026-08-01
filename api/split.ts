@@ -1,5 +1,8 @@
-// PLAN.md §9 — create a shared split. Stores the computed split only: no image,
-// no VPA (stripped again server-side for §10.5), no IPs. 30-day TTL.
+// Create a shared split. Stores the computed split only: no image, no VPA
+// (stripped server-side), no IPs. 30-day TTL.
+// The response includes a writeKey known only to the creator's device — it is
+// required to overwrite the split later (PUT), so holders of the 6-char code
+// can read and toggle paid, but never rewrite amounts.
 import { kv } from '@vercel/kv'
 
 export const config = { runtime: 'edge' }
@@ -10,6 +13,11 @@ const TTL = 30 * 24 * 60 * 60
 function randomCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(6))
   return [...bytes].map((b) => ALPHABET[b % ALPHABET.length]).join('')
+}
+
+function randomWriteKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export default async function handler(req: Request): Promise<Response> {
@@ -24,17 +32,15 @@ export default async function handler(req: Request): Promise<Response> {
   if (body.v !== 1 || !Array.isArray(body.people) || (body.people as unknown[]).length > 30) {
     return Response.json({ error: 'bad split' }, { status: 400 })
   }
-  const raw = JSON.stringify({ ...body, payerVpa: null }) // §10.5 — VPA never reaches KV
-  if (raw.length > 32_000) return Response.json({ error: 'too large' }, { status: 400 })
 
-  // nx + retry on collision (§9)
+  // nx + retry on collision
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = randomCode()
-    const ok = await kv.set(`split:${code}`, raw, { nx: true, ex: TTL })
-    if (ok) {
-      await kv.set(`split:${code}`, JSON.stringify({ ...JSON.parse(raw), code }), { ex: TTL })
-      return Response.json({ code })
-    }
+    const writeKey = randomWriteKey()
+    const record = JSON.stringify({ ...body, payerVpa: null, code, writeKey })
+    if (record.length > 33_000) return Response.json({ error: 'too large' }, { status: 400 })
+    const ok = await kv.set(`split:${code}`, record, { nx: true, ex: TTL })
+    if (ok) return Response.json({ code, writeKey })
   }
   return Response.json({ error: 'collision' }, { status: 503 })
 }

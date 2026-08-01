@@ -16,14 +16,15 @@ import { AppBar, HomeButton, TwoPane } from '../components/Shell'
 import { Check, Clock, Copy, ImageDown, Plus, QrCode as QrIcon, Share2 } from '../components/icons'
 import { iosAppLinks, platform, upiLink } from '../lib/upi'
 import { canInstall, isStandalone, requestInstall } from '../lib/pwa'
-import { codeShareUrl, createCodeShare, fetchCodeShare, fragmentUrl, patchPaid, toShared } from '../share/codec'
+import { codeShareUrl, createCodeShare, fetchCodeShare, fragmentUrl, patchPaid, toShared, updateCodeShare } from '../share/codec'
 import { useHistory } from '../store/history'
 import { buildSplitText, renderSplitImage } from '../share/export'
 import type { Person } from '../lib/types'
 import { clsx } from 'clsx'
 
 export function SummaryScreen() {
-  const { bill, setStep, setPayer, setPayerVpa, markPaid, shareCode, setShareCode, newBill } = useBill()
+  const { bill, setStep, setPayer, setPayerVpa, markPaid, shareCode, shareWriteKey, setShareCode, newBill } =
+    useBill()
   const settings = useSettings()
   const [qrPerson, setQrPerson] = useState<Person | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
@@ -100,13 +101,22 @@ export function SummaryScreen() {
   }, [shareOpen, shareCode, bill, vpa])
 
   const buildShare = async () => {
-    // §9 — try the KV code path; fragment fallback keeps sharing serverless
-    const code = shareCode ?? (await createCodeShare(toShared(bill)))
-    if (code) setShareCode(code)
+    const current = toShared(bill)
+    // sharing again after edits must UPDATE the stored split, not resend the
+    // original snapshot — same code, fresh content (write key proves ownership)
+    if (shareCode && shareWriteKey) {
+      const ok = await updateCodeShare(shareCode, shareWriteKey, current)
+      if (ok) {
+        setShareOpen(true)
+        return { code: shareCode, url: codeShareUrl(shareCode, vpa || null) }
+      }
+    }
+    const created = await createCodeShare(current)
+    if (created) setShareCode(created.code, created.writeKey)
     setShareOpen(true)
     return {
-      code,
-      url: code ? codeShareUrl(code, vpa || null) : fragmentUrl(toShared(bill)),
+      code: created?.code ?? null,
+      url: created ? codeShareUrl(created.code, vpa || null) : fragmentUrl(current),
     }
   }
 
