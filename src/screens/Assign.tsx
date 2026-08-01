@@ -389,7 +389,7 @@ function ExactSplitSheet({ itemId, onClose }: { itemId: string | null; onClose: 
     <Drawer.Root open onOpenChange={(o) => !o && onClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
           <Drawer.Title className="font-warm text-lg">
             Exact portions — {item.name || 'item'}
@@ -398,7 +398,7 @@ function ExactSplitSheet({ itemId, onClose }: { itemId: string | null; onClose: 
             Half steps, so two people can share one unit. Taps on the main screen split evenly —
             this is for uneven splits.
           </p>
-          <div className="mt-3 divide-y divide-rule rounded-lg border border-rule">
+          <div className="mt-3 max-h-[45dvh] divide-y divide-rule overflow-y-auto rounded-lg border border-rule">
             {bill.people.map((p) => (
               <div key={p.id} className="flex items-center gap-2 px-3 py-2">
                 <PersonChip person={p} size="sm" />
@@ -488,7 +488,7 @@ function PeopleSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
     >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
           <Drawer.Title className="font-warm text-lg">People</Drawer.Title>
           <div className="mt-3 flex gap-2">
@@ -503,7 +503,7 @@ function PeopleSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
               Add
             </Button>
           </div>
-          <div className="mt-3 divide-y divide-rule rounded-lg border border-rule">
+          <div className="mt-3 max-h-[45dvh] divide-y divide-rule overflow-y-auto rounded-lg border border-rule">
             {bill.people.map((p) => {
               const confirming = confirmingId === p.id
               return (
@@ -558,7 +558,7 @@ function HelpSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
     <Drawer.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
           <Drawer.Title className="font-warm text-lg">How assigning works</Drawer.Title>
           <ol className="mt-3 space-y-3">
