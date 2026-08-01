@@ -1,7 +1,7 @@
 // Chat-to-assign sheet: describe who ate what in plain language, review the
 // proposed share map, confirm to apply. Nothing touches the bill until the
 // user confirms — the proposal card is the approval step.
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Drawer } from 'vaul'
 import { toast } from 'sonner'
@@ -22,6 +22,12 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ proposals: AssignProposal[]; note: string | null } | null>(null)
   const hasKey = !!getUserKey()
+  const outcomeRef = useRef<HTMLDivElement>(null)
+
+  // whatever the AI answered must end up on screen, keyboard or not
+  useEffect(() => {
+    if (result || error) outcomeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [result, error])
 
   const send = async () => {
     const text = message.trim()
@@ -76,17 +82,18 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
     >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-30 bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 flex max-h-[85dvh] flex-col rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
-          <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-rule" />
-          <Drawer.Title className="shrink-0 font-warm text-lg">Assign by chat</Drawer.Title>
-          <p className="mt-1 shrink-0 text-xs leading-relaxed text-ink-faint">
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-xl bg-paper-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:mx-auto lg:max-w-md">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-rule" />
+          <Drawer.Title className="font-warm text-lg">Assign by chat</Drawer.Title>
+          <p className="mt-1 text-xs leading-relaxed text-ink-faint">
             Say who had what — "Asha ate the biryani, Ben and Chitra shared the naan, everyone
             split the fries". Nothing changes until you confirm.
           </p>
 
-          {/* outcome area lives ABOVE the composer (chat-style) and scrolls,
-              so it can never hide behind the phone keyboard or browser chrome */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* outcome lives ABOVE the composer, in plain document flow: no
+              flex-basis tricks — WebKit collapses basis-0 areas inside
+              content-sized sheets to zero height (invisible responses) */}
+          <div ref={outcomeRef}>
             {!hasKey && (
               <button
                 type="button"
@@ -147,7 +154,7 @@ export function AssignChat({ open, onOpenChange }: { open: boolean; onOpenChange
             )}
           </div>
 
-          <div className="mt-3 flex shrink-0 gap-2">
+          <div className="mt-3 flex gap-2">
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
