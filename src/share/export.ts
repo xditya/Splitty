@@ -1,6 +1,7 @@
 // Export the settled split as a shareable artifact: a receipt-styled PNG for
 // messengers (WhatsApp etc. via the native share sheet), or clean text.
 // All client-side — nothing leaves the device until the user shares it.
+import QRCodeLib from 'qrcode'
 import { allocate, computeSplit } from '../lib/split'
 import { formatPaise, sum, type Paise } from '../lib/money'
 import { initials } from '../lib/palette'
@@ -92,11 +93,16 @@ export function buildSplitText(bill: Bill, shareUrl?: string | null): string {
 }
 
 /**
- * Receipt-styled PNG, drawn on canvas. `shareLine` is an optional short,
- * human-typeable link (host/s/CODE) — never a multi-KB fragment URL.
+ * Receipt-styled PNG, drawn on canvas. When a short code share exists, a
+ * compact footer block carries a scannable QR plus the typeable join code —
+ * fragment URLs are multi-KB, so they only travel in the share caption.
  */
-export async function renderSplitImage(bill: Bill, shareLine?: string | null): Promise<Blob> {
+export async function renderSplitImage(
+  bill: Bill,
+  share?: { url: string; code: string | null } | null,
+): Promise<Blob> {
   const d = buildExport(bill)
+  const qrBlock = !!(share?.code && share.url)
   const W = 720
   const PAD = 40
   const SCALE = 2
@@ -106,7 +112,7 @@ export async function renderSplitImage(bill: Bill, shareLine?: string | null): P
   // measure height
   let h = PAD + 56 + 30 // title + subtitle
   for (const p of d.people) h += 24 + 40 + p.rows.length * 30 + 8
-  h += 24 + 46 + (d.payerLine ? 28 : 0) + (shareLine ? 30 : 0) + 44 + PAD // rule + total + payer + link + footer
+  h += 24 + 46 + (d.payerLine ? 28 : 0) + (qrBlock ? 128 : 0) + 44 + PAD // rule + total + payer + qr + footer
 
   const canvas = document.createElement('canvas')
   canvas.width = W * SCALE
@@ -211,11 +217,24 @@ export async function renderSplitImage(bill: Bill, shareLine?: string | null): P
     ctx.fillText(ellipsize(d.payerLine, right - PAD), PAD, y)
   }
 
-  if (shareLine) {
-    y += 30
-    ctx.font = `bold 15px ${MONO}`
+  if (qrBlock && share) {
+    // compact join block: small QR left, code + hint right
+    y += 22
+    const QR = 96
+    const qrCanvas = document.createElement('canvas')
+    await QRCodeLib.toCanvas(qrCanvas, share.url, { width: QR * SCALE, margin: 1 })
+    ctx.drawImage(qrCanvas, PAD, y, QR, QR)
+    const tx = PAD + QR + 18
+    ctx.fillStyle = '#8a8177'
+    ctx.font = `12px ${MONO}`
+    ctx.fillText('scan to view & pay, or join with code', tx, y + 34)
     ctx.fillStyle = '#2b2622'
-    ctx.fillText(ellipsize(`Pay & track: ${shareLine}`, right - PAD), PAD, y)
+    ctx.font = `bold 26px ${MONO}`
+    ctx.fillText(share.code!.split('').join(' '), tx, y + 66)
+    ctx.fillStyle = '#8a8177'
+    ctx.font = `12px ${MONO}`
+    ctx.fillText(ellipsize(share.url.split('#')[0].replace(/^https?:\/\//, ''), right - tx), tx, y + 90)
+    y += QR
   }
 
   y += 34

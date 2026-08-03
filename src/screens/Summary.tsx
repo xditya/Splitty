@@ -13,7 +13,8 @@ import { Money, MoneyStatic } from '../components/Money'
 import { PersonChip } from '../components/Chip'
 import { Button } from '../components/Button'
 import { AppBar, HomeButton, TwoPane } from '../components/Shell'
-import { Check, Clock, Copy, ImageDown, Plus, QrCode as QrIcon, Share2 } from '../components/icons'
+import { Check, Clock, Plus, QrCode as QrIcon, Share2 } from '../components/icons'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { iosAppLinks, platform, upiLink } from '../lib/upi'
 import { canInstall, isStandalone, requestInstall } from '../lib/pwa'
 import { codeShareUrl, createCodeShare, fetchCodeShare, fragmentUrl, patchPaid, toShared, updateCodeShare } from '../share/codec'
@@ -28,6 +29,7 @@ export function SummaryScreen() {
   const settings = useSettings()
   const [qrPerson, setQrPerson] = useState<Person | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
+  const [shareMode, setShareMode] = useState<'image' | 'text'>('image')
   const split = useMemo(() => computeSplit(bill), [bill])
 
   const payer = bill.people.find((p) => p.id === bill.payerId) ?? null
@@ -120,27 +122,13 @@ export function SummaryScreen() {
     }
   }
 
-  const doShare = async () => {
-    const { url } = await buildShare()
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Splitty — our split', url })
-        return
-      } catch {
-        /* user cancelled — fall through to clipboard */
-      }
-    }
-    await navigator.clipboard.writeText(url)
-    toast('Link copied')
-  }
-
-  // Export the breakdown — image via the native share sheet (WhatsApp etc.),
-  // download fallback on desktop; text via share sheet or clipboard.
+  // ONE share action: image (with QR + code on it) or text, both carrying the
+  // split URL in the caption/message. Image via the native share sheet
+  // (WhatsApp etc.), download fallback on desktop; text falls back to clipboard.
   const exportImage = async () => {
     try {
       const { url: link, code } = await buildShare()
-      // short typeable link on the image itself; fragment URLs are multi-KB
-      const blob = await renderSplitImage(bill, code ? `${location.host}/s/${code}` : null)
+      const blob = await renderSplitImage(bill, { url: link, code })
       const file = new File([blob], 'splitty-split.png', { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
         try {
@@ -279,10 +267,29 @@ export function SummaryScreen() {
           Add the payer's UPI ID above so everyone gets a Pay button in the shared link.
         </p>
       )}
-      <Button variant="primary" full onClick={doShare}>
+      <Button
+        variant="primary"
+        full
+        onClick={() => (shareMode === 'image' ? void exportImage() : void exportText())}
+      >
         <Share2 size={18} />
         Share this split
       </Button>
+      <div className="flex items-center gap-2">
+        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+          as
+        </span>
+        <div className="flex-1">
+          <SegmentedControl
+            options={[
+              { value: 'image', label: 'Image' },
+              { value: 'text', label: 'Text' },
+            ]}
+            value={shareMode}
+            onChange={setShareMode}
+          />
+        </div>
+      </div>
       {shareUrl && (
         <div className="banner-enter flex flex-col items-center gap-2 rounded-lg border border-rule bg-white p-4">
           <QRCode value={shareUrl} size={168} aria-label="Share link QR" />
@@ -307,16 +314,6 @@ export function SummaryScreen() {
           </button>
         </div>
       )}
-      <div className="flex gap-2">
-        <Button className="flex-1" onClick={exportImage}>
-          <ImageDown size={16} />
-          Share as image
-        </Button>
-        <Button className="flex-1" onClick={exportText}>
-          <Copy size={16} />
-          Copy as text
-        </Button>
-      </div>
       <Button variant="ghost" full onClick={() => setStep('charges')}>
         Back to charges
       </Button>
