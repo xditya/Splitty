@@ -4,26 +4,37 @@ import { clsx } from 'clsx'
 import { initials } from '../lib/palette'
 import type { Person } from '../lib/types'
 
+// xs stacks inside item summaries, card sits on the assign header cards.
+const DIMS = {
+  xs: 'h-[18px] w-[18px] text-[8px]',
+  sm: 'h-6 w-6 text-[10px]',
+  card: 'h-8 w-8 text-[11px]',
+  md: 'h-9 w-9 text-xs',
+  lg: 'h-11 w-11 text-sm',
+}
+
 export function PersonChip({
   person,
   active = true,
   size = 'md',
   onClick,
   label,
+  className,
 }: {
   person: Person
   active?: boolean
-  size?: 'sm' | 'md' | 'lg'
+  size?: keyof typeof DIMS
   onClick?: () => void
   label?: React.ReactNode
+  className?: string
 }) {
-  const dims = { sm: 'h-6 w-6 text-[10px]', md: 'h-9 w-9 text-xs', lg: 'h-11 w-11 text-sm' }[size]
   const avatar = (
     <span
       className={clsx(
-        dims,
+        DIMS[size],
         'flex items-center justify-center rounded-full font-bold text-white select-none',
         !active && 'opacity-40',
+        className,
       )}
       style={{ background: person.color }}
     >
