@@ -4,7 +4,7 @@
 // expands the row into exact portions. The ? button walks through all of it.
 // The header always answers "how far am I?" — progress, money still unclaimed,
 // and every person's running total, in one glance.
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Drawer } from 'vaul'
 import { animate, motion, useReducedMotion } from 'motion/react'
 import { useBill } from '../store/bill'
@@ -25,27 +25,13 @@ import {
 } from '../components/icons'
 import { AssignChat } from '../components/AssignChat'
 import { formatPaise, type Paise } from '../lib/money'
-import { fullyAssigned, unitsLabel, unitsUsed } from '../lib/units'
+import { fullyAssigned, unclaimedTotal, unitsUsed, unitsValue } from '../lib/units'
 import type { Item, Person } from '../lib/types'
 import { clsx } from 'clsx'
 
 const firstName = (name: string) => name.split(/\s+/)[0] || name
 /** 1.5 → "1.5", 2 → "2". Units are halves; never show trailing zeros. */
 const unitCount = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 })
-/** Stepper value: whole units read as plain digits, halves as fractions. */
-const stepperLabel = (n: number) =>
-  Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : unitsLabel(n)
-
-/** Money still riding on units nobody has claimed — the header's headline number. */
-function unclaimedPaise(items: Item[]): Paise {
-  let s = 0
-  for (const i of items) {
-    const qty = Math.max(1, i.qty)
-    const left = Math.max(0, qty - unitsUsed(i.shares))
-    if (left > 0.001) s += Math.round((i.lineTotal * left) / qty)
-  }
-  return s
-}
 
 /**
  * Swipe-to-clear gesture: pointer capture, grab offset respected, 10px
@@ -151,6 +137,9 @@ const buzz = () => navigator.vibrate?.(35)
 function assignedNote(item: Item, holders: [Person, number][], parts: Record<string, Paise>) {
   const qty = Math.max(1, item.qty)
   const used = unitsUsed(item.shares)
+  // Incomplete: the count is the whole story, and the money would lie —
+  // allocate() bills the entire line to whoever is on it until the last unit
+  // is claimed. Same wording as the portions editor's footer, on purpose.
   if (used < qty - 0.02) return { text: `${unitCount(used)} of ${qty} assigned`, amber: true }
   if (holders.length === 1) return { text: `${firstName(holders[0][0].name)} only`, amber: false }
   const everyoneOneUnit =
@@ -160,11 +149,21 @@ function assignedNote(item: Item, holders: [Person, number][], parts: Record<str
   // Even units can still differ by a paise after Hamilton rounding — that is
   // still "each" to a human, so read the amount off the first holder.
   if (even) return { text: `${formatPaise(parts[holders[0][0].id] ?? 0)} each`, amber: false }
-  return { text: 'uneven portions', amber: false }
+  // Uneven: name the portions in avatar order — the avatars alongside are the
+  // legend, so `1/2 · 1/2 · 1` says who had what without a second line.
+  return { text: holders.map(([, n]) => unitsValue(n)).join(' · '), amber: false }
 }
 
 /** Exact portions, inline: half-unit steppers for every person, committed on Apply. */
-function PortionsPanel({ item, onClose }: { item: Item; onClose: () => void }) {
+function PortionsPanel({
+  item,
+  onClose,
+  onOpened,
+}: {
+  item: Item
+  onClose: () => void
+  onOpened: () => void
+}) {
   const { bill, updateItem } = useBill()
   const reduced = useReducedMotion()
   const [units, setUnits] = useState<Record<string, number>>(() =>
@@ -188,6 +187,7 @@ function PortionsPanel({ item, onClose }: { item: Item; onClose: () => void }) {
       initial={{ height: 0, opacity: 0 }}
       animate={{ height: 'auto', opacity: 1 }}
       transition={{ duration: reduced ? 0 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+      onAnimationComplete={onOpened}
       className="overflow-hidden"
     >
       <div className="flex flex-col gap-1.5 px-3 pb-3">
@@ -207,7 +207,7 @@ function PortionsPanel({ item, onClose }: { item: Item; onClose: () => void }) {
                 <Minus size={13} />
               </button>
               <span className="tabular w-8 text-center font-mono text-[13px] font-semibold">
-                {stepperLabel(n)}
+                {unitsValue(n)}
               </span>
               <button
                 type="button"
@@ -225,7 +225,8 @@ function PortionsPanel({ item, onClose }: { item: Item; onClose: () => void }) {
           <span
             className={clsx(
               'text-[11px]',
-              remaining > 0.001 ? 'font-semibold text-amber-flag' : 'text-ink-faint',
+              // same phrase, same ink as the row summary — see assignedNote
+              remaining > 0.001 ? 'font-semibold text-amber-700' : 'text-ink-faint',
             )}
           >
             {unitCount(total)} of {qty} assigned
@@ -262,12 +263,14 @@ function AssignRow({
   const { bill, activePersonIds, tapAssign, clearShares } = useBill()
   const [rejecting, setRejecting] = useState(false)
   const editorRef = useRef<HTMLDivElement>(null)
+  const reduced = useReducedMotion()
 
-  // The tray covers the bottom third; an editor opened down there would be
-  // half-hidden. Bring it into thumb reach once, on open.
-  useEffect(() => {
-    if (expanded) editorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [expanded])
+  // Called once the panel has finished growing, so we scroll against its real
+  // height, not the collapsed stub. `nearest` is the point: a row already in
+  // the clear stays put, and one that isn't moves the least it can. The scroll
+  // margins below stand in for the sticky header and the tray.
+  const revealEditor = () =>
+    editorRef.current?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
 
   const gesture = useSwipeToClear(
     () => clearShares(item.id),
@@ -284,7 +287,10 @@ function AssignRow({
 
   if (expanded) {
     return (
-      <div ref={editorRef} className="bg-paper shadow-[inset_0_0_0_1.5px_var(--color-ink)]">
+      <div
+        ref={editorRef}
+        className="scroll-mt-60 scroll-mb-36 bg-paper shadow-[inset_0_0_0_1.5px_var(--color-ink)] lg:scroll-mt-6 lg:scroll-mb-6"
+      >
         <button
           type="button"
           aria-expanded
@@ -301,7 +307,7 @@ function AssignRow({
           <MoneyStatic paise={item.lineTotal} className="text-sm" />
           <ChevronUp size={14} aria-hidden />
         </button>
-        <PortionsPanel item={item} onClose={() => onExpand(null)} />
+        <PortionsPanel item={item} onClose={() => onExpand(null)} onOpened={revealEditor} />
       </div>
     )
   }
@@ -346,13 +352,18 @@ function AssignRow({
                   key={p.id}
                   person={p}
                   size="xs"
-                  className={clsx('border-[1.5px] border-paper-raised', i > 0 && '-ml-1.5')}
+                  className={clsx('shrink-0 border-[1.5px] border-paper-raised', i > 0 && '-ml-1.5')}
                 />
               ))}
               <span
                 className={clsx(
-                  'tabular ml-1 font-mono text-[10px]',
-                  note.amber ? 'font-semibold text-amber-flag' : 'text-ink-faint',
+                  'tabular ml-1 min-w-0 truncate font-mono text-[10px]',
+                  // amber-flag (#d97706) is the flag colour for rules and
+                  // borders; as text it only reaches 3.1:1 on paper, so every
+                  // small amber word on this screen — this note, the portions
+                  // footer, the unclaimed pill, the hint chip — uses amber-700
+                  // (4.9:1) instead.
+                  note.amber ? 'font-semibold text-amber-700' : 'text-ink-faint',
                 )}
               >
                 {note.text}
@@ -416,24 +427,41 @@ function PeoplePills() {
   )
 }
 
-/** `Everyone` / `Edit people` — the tray's label row, right side. */
+/**
+ * `Everyone` · `None` · `Edit people` — the tray's label row, right side.
+ * These are the old selection pills, promoted out of the scrolling row. Each
+ * shows only when it would do something, so the row never offers a dead tap
+ * and never holds more than three: at most one of Everyone/None is redundant
+ * at any moment. No aria-pressed — the label changes what it does, not a
+ * state it is in.
+ */
 function TrayActions({ onManage }: { onManage: () => void }) {
   const { bill, activePersonIds, selectAll, clearSelection } = useBill()
   const allSelected = activePersonIds.length === bill.people.length && bill.people.length > 0
   return (
-    <div className="flex gap-3">
-      <button
-        type="button"
-        aria-pressed={allSelected}
-        onClick={() => (allSelected ? clearSelection() : selectAll())}
-        className="pressable text-[11px] font-semibold text-ink"
-      >
-        {allSelected ? 'None' : 'Everyone'}
-      </button>
+    <div className="flex items-center gap-3">
+      {bill.people.length > 0 && !allSelected && (
+        <button
+          type="button"
+          onClick={selectAll}
+          className="pressable py-1 text-[11px] font-semibold text-ink"
+        >
+          Everyone
+        </button>
+      )}
+      {activePersonIds.length > 0 && (
+        <button
+          type="button"
+          onClick={clearSelection}
+          className="pressable banner-enter py-1 text-[11px] font-semibold text-ink-faint"
+        >
+          None
+        </button>
+      )}
       <button
         type="button"
         onClick={onManage}
-        className="pressable text-[11px] font-semibold text-ink-faint"
+        className="pressable py-1 text-[11px] font-semibold text-ink-faint"
       >
         Edit people
       </button>
@@ -724,7 +752,7 @@ export function AssignScreen() {
   const split = computeSplit(bill)
   const done = bill.items.filter((i) => fullyAssigned(i.shares, i.qty)).length
   const unassigned = bill.items.length - done
-  const unclaimed = unclaimedPaise(bill.items)
+  const unclaimed = unclaimedTotal(bill.items)
 
   return (
     <div className="isolate flex min-h-dvh flex-col">
