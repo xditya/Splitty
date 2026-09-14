@@ -22,12 +22,14 @@ It never dead-ends. Scanning tries your own Gemini key first (straight from the 
 Google), then a shared free-tier proxy, then on-device OCR with tesseract.js WASM. If all three
 are down you can still type the bill in by hand.
 
-Assignment is the part competitors get wrong, so most of the work went there. You select whoever
-shared a thing in the bottom tray and tap the thing: it splits evenly among them in one tap.
-Long-pressing an item opens exact portions with half-unit steppers, for nights when someone had
-two and two people shared one. Tapping a name badge takes that person off an item, swiping left
-clears it, and a single-level undo covers every change. When a tap can't do anything, the row
-shakes and the phone buzzes instead of silently ignoring you.
+Assignment is the part competitors get wrong, so most of the work went there. The header answers
+"how far am I" without being asked: a progress bar, the money nobody has claimed yet, and every
+person's running total on a card that doubles as the control for picking them. You select whoever
+shared a thing and tap the thing: it splits evenly among them in one tap. The ⋯ button expands a
+row into exact portions with half-unit steppers, for nights when someone had two and two people
+shared one — stepping someone to zero there takes them off the item. Swiping a row left clears
+it, a single-level undo covers every change, and when a tap can't do anything the row shakes and
+the phone buzzes instead of silently ignoring you.
 
 If tapping is too much work, tap Chat and type "Asha ate the biryani, Ben and Chitra shared the
 naan, everyone split the fries". The AI replies with a per-item proposal card, and nothing is
@@ -52,9 +54,14 @@ phone entirely.
   app. Android also gets a direct `upi://` intent button; iOS gets per-app buttons for GPay,
   PhonePe, and Paytm.
 - One QR or link shares the whole split with the table, either as a 6-char code backed by Vercel
-  KV or as a fully serverless `lz-string` URL fragment. Paid status syncs live in both
-  directions, and sharing again after edits updates the stored split under the same code (only
-  the creator's device holds the write key).
+  KV or as a fully serverless `lz-string` URL fragment. Settlement syncs live in both directions,
+  and sharing again after edits updates the stored split under the same code (only the creator's
+  device holds the write key).
+- Paid is two-sided, because it has to be: a UPI intent link reports to the payee's bank and
+  never back to the page, so nothing here is a verified payment. Whoever owes says "I've sent
+  it"; the person who fronted the bill confirms it arrived, and only they can. Opening a UPI app
+  hands over the whole screen, and coming back is the one moment a browser learns anything at
+  all — so that is when the shared view asks, instead of hoping someone remembers the checkbox.
 - Exports go out as a receipt-styled PNG drawn on a canvas, per person with share fractions and
   the share link printed on it, straight to WhatsApp through the native share sheet. A clean
   plain-text version covers everything else.
@@ -99,7 +106,7 @@ scanning and chat with rate limiting, plus code-based shares.
 ## Project layout
 
 ```
-src/lib/        split engine (allocate, computeSplit), money, UPI links, unit helpers
+src/lib/        split engine (allocate, computeSplit), money, UPI links, unit + settle helpers
 src/scan/       preprocess → engine router → gemini / tesseract + geometric layout parser
 src/store/      zustand stores (bill, settings, history)
 src/screens/    Home · People · Items · Assign · Charges · Summary · Settings · Join · Shared
