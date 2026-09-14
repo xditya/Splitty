@@ -25,11 +25,11 @@ import {
 } from '../components/icons'
 import { AssignChat } from '../components/AssignChat'
 import { formatPaise, type Paise } from '../lib/money'
+import { firstName } from '../lib/palette'
 import { fullyAssigned, unclaimedTotal, unitsUsed, unitsValue } from '../lib/units'
 import type { Item, Person } from '../lib/types'
 import { clsx } from 'clsx'
 
-const firstName = (name: string) => name.split(/\s+/)[0] || name
 /** 1.5 → "1.5", 2 → "2". Units are halves; never show trailing zeros. */
 const unitCount = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 })
 

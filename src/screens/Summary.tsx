@@ -2,7 +2,7 @@
 // (§10.3), fragment share link first with KV code layered on (§9), manual
 // mark-as-paid only — never imply verification (§10.4).
 // Desktop (lg+): settle list left, payer + share/export right.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'react-qr-code'
 import { Drawer } from 'vaul'
 import { toast } from 'sonner'
@@ -17,7 +17,9 @@ import { Check, Clock, Plus, QrCode as QrIcon, Share2 } from '../components/icon
 import { SegmentedControl } from '../components/SegmentedControl'
 import { iosAppLinks, platform, upiLink } from '../lib/upi'
 import { canInstall, isStandalone, requestInstall } from '../lib/pwa'
-import { codeShareUrl, createCodeShare, fetchCodeShare, fragmentUrl, patchPaid, toShared, updateCodeShare } from '../share/codec'
+import { settlePatch, settleState } from '../lib/settle'
+import { firstName } from '../lib/palette'
+import { codeShareUrl, createCodeShare, fetchCodeShare, fragmentUrl, patchSettle, toShared, updateCodeShare } from '../share/codec'
 import { useHistory } from '../store/history'
 import { buildSplitText, renderSplitImage } from '../share/export'
 import type { Person } from '../lib/types'
@@ -36,6 +38,10 @@ export function SummaryScreen() {
   const vpa = bill.payerVpa ?? ''
   const nonPayers = bill.people.filter((p) => p.id !== bill.payerId)
   const allSettled = nonPayers.length > 0 && nonPayers.every((p) => bill.paid[p.id])
+  // §10.4 — people who say they have sent it and are waiting on this screen.
+  const waiting = nonPayers.filter(
+    (p) => settleState(p.id, bill.payerId, bill.paid, bill.claimed) === 'claimed',
+  )
 
   // remember VPA on-device only (§10.1) — prefill from settings
   useEffect(() => {
@@ -43,18 +49,27 @@ export function SummaryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Paid status is shared state once a code exists: pull the server's view
-  // every 15s so recipients marking themselves paid shows up HERE, on the
-  // payer's screen — not only on other recipients' screens.
+  // Settlement is shared state once a code exists: pull the server's view
+  // every 15s so a recipient saying "I've sent it" shows up HERE, on the
+  // payer's screen — that claim is the whole point, since only this screen can
+  // turn it into a confirmation.
+  // A GET already in flight when someone taps carries the pre-tap answer, and
+  // applying it would flip the button back for a moment. Hold the poll off
+  // until our own write has had time to land.
+  const localWriteUntil = useRef(0)
   useEffect(() => {
     if (!shareCode) return
     const sync = async () => {
       const remote = await fetchCodeShare(shareCode)
-      if (!remote?.paid) return
-      const { bill: current, markPaid: apply } = useBill.getState()
+      if (!remote?.paid || Date.now() < localWriteUntil.current) return
+      const { bill: current, markPaid: applyPaid, markClaimed: applyClaim } = useBill.getState()
       for (const p of current.people) {
-        const remoteVal = !!remote.paid[p.id]
-        if (remoteVal !== !!current.paid[p.id]) apply(p.id, remoteVal)
+        const remotePaid = !!remote.paid[p.id]
+        const remoteClaim = !!remote.claimed?.[p.id]
+        // claims first: markPaid clears the claim it answers, so applying them
+        // the other way round would resurrect a claim the payer just settled
+        if (remoteClaim !== !!current.claimed?.[p.id]) applyClaim(p.id, remoteClaim)
+        if (remotePaid !== !!current.paid[p.id]) applyPaid(p.id, remotePaid)
       }
     }
     void sync()
@@ -62,11 +77,15 @@ export function SummaryScreen() {
     return () => clearInterval(t)
   }, [shareCode])
 
-  // …and push local toggles up, so recipients' views update too.
-  const togglePaid = (personId: string) => {
+  // …and push local toggles up, so recipients' views update too. This screen
+  // only ever sets `paid` — it is the payer confirming that money arrived —
+  // and confirming supersedes any claim, so both halves go in one patch.
+  const toggleConfirmed = (personId: string) => {
     const next = !bill.paid[personId]
+    const patch = settlePatch(next ? 'confirmed' : 'pending')
+    localWriteUntil.current = Date.now() + 4000
     markPaid(personId, next)
-    if (shareCode) void patchPaid(shareCode, personId, next)
+    if (shareCode) void patchSettle(shareCode, personId, patch)
   }
 
   // Keep the device-local history snapshot current (visible on Home until —
@@ -215,7 +234,7 @@ export function SummaryScreen() {
       {bill.people.map((p) => {
         const b = split.perPerson[p.id]
         const isPayer = p.id === bill.payerId
-        const paid = isPayer || !!bill.paid[p.id]
+        const state = settleState(p.id, bill.payerId, bill.paid, bill.claimed)
         return (
           <div key={p.id} className="flex items-start gap-3 border-b border-dashed border-rule px-3 py-3">
             <PersonChip person={p} size="md" />
@@ -229,22 +248,31 @@ export function SummaryScreen() {
                 <MoneyStatic paise={(b?.total ?? 0) - (b?.itemsSubtotal ?? 0)} />
               </div>
               {!isPayer && (
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <Button size="sm" disabled={!vpa} onClick={() => setQrPerson(p)}>
                     <QrIcon size={14} />
                     Pay
                   </Button>
                   <button
                     type="button"
-                    onClick={() => togglePaid(p.id)}
-                    aria-pressed={paid}
+                    onClick={() => toggleConfirmed(p.id)}
+                    aria-pressed={state === 'confirmed'}
+                    aria-label={
+                      state === 'confirmed'
+                        ? `Undo — ${p.name} has not settled`
+                        : `Confirm ${p.name}'s payment arrived`
+                    }
                     className={clsx(
-                      'pressable flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold',
-                      paid ? 'text-settle-paid' : 'text-settle-pending',
+                      'pressable flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold whitespace-nowrap',
+                      state === 'confirmed' && 'text-settle-paid',
+                      // a claim is a nudge aimed at this button, so it reads
+                      // like one until the payer answers it
+                      state === 'claimed' && 'bg-amber-100 text-amber-700',
+                      state === 'pending' && 'text-settle-pending',
                     )}
                   >
-                    {paid ? <Check size={14} /> : <Clock size={14} />}
-                    {paid ? 'Paid' : 'Pending'}
+                    {state === 'confirmed' ? <Check size={14} /> : <Clock size={14} />}
+                    {state === 'confirmed' ? 'Paid' : state === 'claimed' ? 'Confirm' : 'Pending'}
                   </button>
                 </div>
               )}
@@ -350,6 +378,15 @@ export function SummaryScreen() {
             )}
 
             <div className="mt-4 lg:hidden">{payerCard}</div>
+            {waiting.length > 0 && (
+              <p className="banner-enter mt-4 rounded-lg bg-amber-100 px-3 py-2 text-xs leading-relaxed text-amber-700">
+                <span className="font-semibold">
+                  {waiting.map((p) => firstName(p.name)).join(', ')}
+                </span>{' '}
+                {waiting.length === 1 ? 'says they have' : 'say they have'} sent their share. Check
+                your UPI app, then confirm below — only you can see the money arrive.
+              </p>
+            )}
             <div className="mt-4">{settleList}</div>
 
             {/* §15.2 — the delight budget: the rare, earned moment */}

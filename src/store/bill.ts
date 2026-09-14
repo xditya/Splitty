@@ -22,6 +22,7 @@ function emptyBill(): Bill {
     payerId: null,
     payerVpa: null,
     paid: {},
+    claimed: {},
     engine: 'manual',
   }
 }
@@ -69,6 +70,7 @@ interface BillActions {
   setPayer: (id: string | null) => void
   setPayerVpa: (vpa: string | null) => void
   markPaid: (personId: string, paid: boolean) => void
+  markClaimed: (personId: string, claimed: boolean) => void
   setEngine: (e: EngineTag) => void
   setShareCode: (c: string | null, writeKey?: string | null) => void
 }
@@ -146,6 +148,9 @@ export const useBill = create<BillActions>()(
             }),
             payerId: s.bill.payerId === id ? null : s.bill.payerId,
             paid: Object.fromEntries(Object.entries(s.bill.paid).filter(([k]) => k !== id)),
+            claimed: Object.fromEntries(
+              Object.entries(s.bill.claimed ?? {}).filter(([k]) => k !== id),
+            ),
           },
           activePersonIds: s.activePersonIds.filter((x) => x !== id),
         })),
@@ -288,8 +293,19 @@ export const useBill = create<BillActions>()(
 
       setPayer: (payerId) => set((s) => ({ bill: { ...s.bill, payerId } })),
       setPayerVpa: (payerVpa) => set((s) => ({ bill: { ...s.bill, payerVpa } })),
+      // Confirming clears the claim it answers (settlePatch is the one rule).
       markPaid: (personId, paid) =>
-        set((s) => ({ bill: { ...s.bill, paid: { ...s.bill.paid, [personId]: paid } } })),
+        set((s) => ({
+          bill: {
+            ...s.bill,
+            paid: { ...s.bill.paid, [personId]: paid },
+            claimed: { ...(s.bill.claimed ?? {}), [personId]: false },
+          },
+        })),
+      markClaimed: (personId, claimed) =>
+        set((s) => ({
+          bill: { ...s.bill, claimed: { ...(s.bill.claimed ?? {}), [personId]: claimed } },
+        })),
       setEngine: (engine) => set((s) => ({ bill: { ...s.bill, engine } })),
       setShareCode: (shareCode, writeKey = null) => set({ shareCode, shareWriteKey: writeKey }),
     }),

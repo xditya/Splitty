@@ -15,6 +15,11 @@ export function colorForIndex(i: number): string {
   return PALETTE[i % PALETTE.length]
 }
 
+/** How the UI addresses someone: the first word of their name. */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
   if (parts.length === 0 || !parts[0]) return '?'

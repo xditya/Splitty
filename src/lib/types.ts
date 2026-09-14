@@ -55,7 +55,9 @@ export interface Bill {
   total: Paise // as printed on the bill (may disagree with lines — §5.1 flags, never blocks)
   payerId: string | null
   payerVpa: string | null // never persisted server-side (§10.5)
-  paid: Record<string, boolean>
+  paid: Record<string, boolean> // confirmed BY THE PAYER — see lib/settle.ts
+  /** "I've sent it", said by the person who owes. Absent on pre-§10.4 bills. */
+  claimed?: Record<string, boolean>
   engine: EngineTag
 }
 

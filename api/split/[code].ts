@@ -1,7 +1,12 @@
-// Read a shared split; PATCH toggles `paid` (anyone with the code — manual,
-// no payment verification implied); PUT replaces the whole split, but only
-// with the creator's writeKey, and refreshes the 30-day TTL. The writeKey is
-// stored inside the record and stripped from every read.
+// Read a shared split; PATCH updates one person's settlement — `claimed` ("I
+// sent it", from whoever owes) and/or `paid` ("it arrived", from the payer).
+// Both are manual assertions by people, not verified payments: a UPI intent
+// link reports back to the payee's bank, never to us. Anyone holding the code
+// can set either, exactly as before — the split belongs to a table of friends,
+// and locking confirmation to the creator's device would strand a split the
+// moment that device cleared its storage. PUT replaces the whole split, but
+// only with the creator's writeKey, and refreshes the 30-day TTL. The writeKey
+// is stored inside the record and stripped from every read.
 import { kv } from '@vercel/kv'
 
 export const config = { runtime: 'edge' }
@@ -11,6 +16,7 @@ const TTL = 30 * 24 * 60 * 60
 
 interface StoredSplit {
   paid: Record<string, boolean>
+  claimed?: Record<string, boolean>
   people: { id: string }[]
   writeKey?: string
   [k: string]: unknown
@@ -37,19 +43,27 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   if (req.method === 'PATCH') {
-    let body: { personId?: string; paid?: boolean }
+    let body: { personId?: string; paid?: boolean; claimed?: boolean }
     try {
       body = await req.json()
     } catch {
       return Response.json({ error: 'bad request' }, { status: 400 })
     }
-    if (!body.personId || typeof body.paid !== 'boolean') {
+    const hasPaid = typeof body.paid === 'boolean'
+    const hasClaimed = typeof body.claimed === 'boolean'
+    if (!body.personId || (!hasPaid && !hasClaimed)) {
       return Response.json({ error: 'bad request' }, { status: 400 })
     }
     if (!record.people.some((p) => p.id === body.personId)) {
       return Response.json({ error: 'unknown person' }, { status: 400 })
     }
-    record.paid = { ...record.paid, [body.personId]: body.paid }
+    // Each field is applied only when sent, so a client that knows nothing of
+    // claims (an older cached build sending just `paid`) still works, and
+    // leaves the other field as it found it.
+    if (hasPaid) record.paid = { ...record.paid, [body.personId]: body.paid! }
+    if (hasClaimed) {
+      record.claimed = { ...(record.claimed ?? {}), [body.personId]: body.claimed! }
+    }
     const ttl = await kv.ttl(key)
     await kv.set(key, JSON.stringify(record), { ex: ttl > 0 ? ttl : 24 * 60 * 60 })
     const { writeKey: _writeKey, ...pub } = record

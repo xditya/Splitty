@@ -6,6 +6,7 @@ import { allocate, computeSplit } from '../lib/split'
 import { formatPaise, sum, type Paise } from '../lib/money'
 import { initials } from '../lib/palette'
 import { unitsLabel } from '../lib/units'
+import { settleState } from '../lib/settle'
 import type { Bill } from '../lib/types'
 
 interface PersonExport {
@@ -13,6 +14,8 @@ interface PersonExport {
   color: string
   isPayer: boolean
   paid: boolean
+  /** Said they sent it; the payer has not confirmed. Never counted as paid. */
+  claimed: boolean
   total: Paise
   rows: { label: string; amount: Paise }[]
 }
@@ -57,7 +60,8 @@ export function buildExport(bill: Bill): ExportData {
       name: p.name,
       color: p.color,
       isPayer: p.id === bill.payerId,
-      paid: p.id === bill.payerId || !!bill.paid[p.id],
+      paid: settleState(p.id, bill.payerId, bill.paid, bill.claimed) === 'confirmed',
+      claimed: settleState(p.id, bill.payerId, bill.paid, bill.claimed) === 'claimed',
       total: b?.total ?? 0,
       rows,
     }
@@ -79,7 +83,14 @@ export function buildSplitText(bill: Bill, shareUrl?: string | null): string {
   const d = buildExport(bill)
   const lines: string[] = [`🧾 ${d.title}${d.subtitle ? ` · ${d.subtitle}` : ''} — split with Splitty`, '']
   for (const p of d.people) {
-    lines.push(`${p.name}${p.isPayer ? ' (paid the bill)' : ''}${p.paid && !p.isPayer ? ' ✓ paid' : ''} — ${formatPaise(p.total)}`)
+    const tag = p.isPayer
+      ? ' (paid the bill)'
+      : p.paid
+        ? ' ✓ paid'
+        : p.claimed
+          ? ' ⏳ says paid'
+          : ''
+    lines.push(`${p.name}${tag} — ${formatPaise(p.total)}`)
     for (const r of p.rows) lines.push(`  • ${r.label} — ${formatPaise(r.amount)}`)
     lines.push('')
   }
@@ -172,7 +183,13 @@ export async function renderSplitImage(
 
     ctx.fillStyle = '#2b2622'
     ctx.font = `bold 17px ${MONO}`
-    const tag = p.isPayer ? '  · paid the bill' : p.paid ? '  · ✓ paid' : ''
+    const tag = p.isPayer
+      ? '  · paid the bill'
+      : p.paid
+        ? '  · ✓ paid'
+        : p.claimed
+          ? '  · says paid'
+          : ''
     const totalText = formatPaise(p.total)
     const totalW = ctx.measureText(totalText).width
     ctx.fillText(ellipsize(`${p.name}${tag}`, right - PAD - 34 - totalW - 16), PAD + 34, y)

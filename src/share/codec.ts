@@ -16,6 +16,7 @@ export interface SharedSplit {
   payerId: string | null
   payerVpa: string | null // fragment shares only; stripped before any server write
   paid: Record<string, boolean>
+  claimed?: Record<string, boolean> // absent on splits shared before §10.4
   code?: string
 }
 
@@ -42,6 +43,7 @@ export function toShared(bill: Bill): SharedSplit {
     payerId: bill.payerId,
     payerVpa: bill.payerVpa,
     paid: bill.paid,
+    claimed: bill.claimed ?? {},
   }
 }
 
@@ -128,12 +130,23 @@ export async function fetchCodeShare(code: string): Promise<SharedSplit | null> 
   }
 }
 
-export async function patchPaid(code: string, personId: string, paid: boolean): Promise<boolean> {
+/**
+ * Push one person's settlement to the shared record. Callers send the full
+ * desired pair (see lib/settle.ts `settlePatch`) so the server stays dumb and
+ * the paid/claimed rule lives in exactly one place. `claimed` is optional on
+ * the wire: a client that omits it leaves the stored claim untouched, which is
+ * what an older cached build does.
+ */
+export async function patchSettle(
+  code: string,
+  personId: string,
+  patch: { paid?: boolean; claimed?: boolean },
+): Promise<boolean> {
   try {
     const res = await fetch(`/api/split/${code}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ personId, paid }),
+      body: JSON.stringify({ personId, ...patch }),
     })
     return res.ok
   } catch {
